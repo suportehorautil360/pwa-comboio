@@ -52,6 +52,7 @@ export function FieldHomeScreen() {
         <SectionHeading title="Registrar em Campo" />
         <ActionCard
           featured
+          href="/abastecer"
           icon={Fuel}
           title="Abastecer equipamento"
           subtitle="Diesel · litros, horímetro ou km"
