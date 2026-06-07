@@ -4,6 +4,8 @@ export { BottomNav } from "./bottom-nav";
 export { FieldHeader } from "./field-header";
 export { FieldHomeScreen } from "./field-home-screen";
 export { FormFieldLabel } from "./form-field-label";
+export { HistoryScreen } from "./history-screen";
+export { HistoryStatCard } from "./history-stat-card";
 export { FuelFormScreen } from "./fuel-form-screen";
 export { FuelGauge } from "./fuel-gauge";
 export { InputWithSuffix } from "./input-with-suffix";
