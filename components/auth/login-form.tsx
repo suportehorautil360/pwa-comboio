@@ -33,12 +33,12 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="usuario">Usuário</Label>
+        <Label htmlFor="usuario">CPF ou login</Label>
         <Input
           id="usuario"
           name="usuario"
           type="text"
-          placeholder="seu.usuario"
+          placeholder="CPF ou seu login"
           autoComplete="username"
           value={usuario}
           onChange={(e) => setUsuario(e.target.value)}

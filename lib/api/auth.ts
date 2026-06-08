@@ -1,27 +1,47 @@
-/** Autenticação — POST /user/auth/login (NestJS). */
+/** Autenticação do operador/comboista — POST /funcionarios/auth/login (NestJS). */
 import { api } from "./client";
 import type { SessionUser } from "../session";
+
+interface FuncionarioAuth {
+  id: string;
+  nome: string;
+  cpf: string;
+  cargo: string;
+  loginGerado: string;
+  prefeituraId: string;
+}
 
 interface LoginResponse {
   ok: boolean;
   msg?: string;
   message?: string;
-  user?: SessionUser;
+  funcionario?: FuncionarioAuth;
   accessToken?: string;
   tokenType?: string;
   expiresIn?: string;
 }
 
+/** Login por CPF (11 dígitos) ou login gerado (nome + 3 dígitos do CPF). */
 export async function login(
-  usuario: string,
+  identificador: string,
   senha: string,
 ): Promise<{ token: string; user: SessionUser }> {
-  const r = await api.post<LoginResponse>("/user/auth/login", {
-    usuario,
+  const r = await api.post<LoginResponse>("/funcionarios/auth/login", {
+    identificador,
     senha,
   });
-  if (!r.ok || !r.accessToken || !r.user) {
-    throw new Error(r.msg ?? r.message ?? "Login ou senha inválidos.");
+  if (!r.ok || !r.accessToken || !r.funcionario) {
+    throw new Error(r.msg ?? r.message ?? "Identificador ou senha incorretos.");
   }
-  return { token: r.accessToken, user: r.user };
+  const f = r.funcionario;
+  return {
+    token: r.accessToken,
+    user: {
+      nome: f.nome,
+      usuario: f.loginGerado || f.cpf,
+      perfil: f.cargo,
+      vinculo: "operador",
+      prefeituraId: f.prefeituraId,
+    },
+  };
 }
