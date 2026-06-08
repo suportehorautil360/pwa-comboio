@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MapPin, Wifi } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
@@ -14,23 +15,133 @@ import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  criarAbastecimento,
+  listarEquipamentos,
+  listarPostos,
+  type EquipamentoApi,
+  type PostoApi,
+} from "@/lib/api/abastecimento";
+import { getSessionUser } from "@/lib/session";
 
-const LAST_READING = 4812;
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Falha ao ler a foto."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export function FuelFormScreen() {
+  const router = useRouter();
+  const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
+  const [postos, setPostos] = useState<PostoApi[]>([]);
+
+  const [equipment, setEquipment] = useState("");
+  const [liters, setLiters] = useState("");
   const [measurement, setMeasurement] = useState<MeasurementType>("horimetro");
+  const [reading, setReading] = useState("");
+  const [postoId, setPostoId] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
+  const [gpsMsg, setGpsMsg] = useState("Capturando GPS…");
+
   const [isSaving, setIsSaving] = useState(false);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
-  const lastReadingLabel =
-    measurement === "horimetro"
-      ? `${LAST_READING.toLocaleString("pt-BR")} h`
-      : "—";
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    const user = getSessionUser();
+    if (!user?.prefeituraId) {
+      router.push("/");
+      return;
+    }
+    const pid = user.prefeituraId;
+    void listarEquipamentos(pid)
+      .then(setEquipamentos)
+      .catch(() => setEquipamentos([]));
+    void listarPostos(pid)
+      .then(setPostos)
+      .catch(() => setPostos([]));
+
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsMsg("");
+      },
+      () => setGpsMsg("GPS indisponível — abastecimento salvo sem localização"),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, [router]);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErro("");
+    setSucesso("");
+
+    const litrosNum = Number(liters);
+    const leituraNum = Number(reading);
+    if (!equipment.trim()) {
+      setErro("Informe a placa ou chassi do equipamento.");
+      return;
+    }
+    if (!(litrosNum > 0)) {
+      setErro("Informe os litros abastecidos.");
+      return;
+    }
+    if (!Number.isFinite(leituraNum)) {
+      setErro("Informe a leitura atual.");
+      return;
+    }
+
+    const pid = getSessionUser()?.prefeituraId ?? "";
+    if (!pid) {
+      setErro("Sessão expirada. Faça login novamente.");
+      return;
+    }
+
     setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 800);
+    try {
+      const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
+      await criarAbastecimento({
+        prefeituraId: pid,
+        plateOrChassis: equipment.trim().toUpperCase(),
+        liters: litrosNum,
+        measurementType: measurement,
+        currentReading: leituraNum,
+        meterPhoto,
+        postoId: postoId || undefined,
+        latitude: coords?.lat ?? 0,
+        longitude: coords?.lng ?? 0,
+      });
+      setSucesso("Abastecimento registrado!");
+      setEquipment("");
+      setLiters("");
+      setReading("");
+      setPostoId("");
+      setPhotoFile(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -47,13 +158,28 @@ export function FuelFormScreen() {
           <Input
             id="equipment"
             name="equipment"
+            list="equip-list"
             placeholder="Ex: ABC-1234"
             className="h-11 uppercase md:text-base"
+            value={equipment}
+            onChange={(e) => setEquipment(e.target.value)}
             required
           />
+          <datalist id="equip-list">
+            {equipamentos.map((eq) => {
+              const valor = eq.placa || eq.chassis || "";
+              if (!valor) return null;
+              return (
+                <option key={eq.id} value={valor}>
+                  {eq.descricao ?? eq.modelo ?? valor}
+                </option>
+              );
+            })}
+          </datalist>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Digite e o app busca no cadastro offline. Não encontrou? Cadastra na
-            hora.
+            {equipamentos.length > 0
+              ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`
+              : "Digite a placa ou chassi do equipamento."}
           </p>
         </div>
 
@@ -70,6 +196,8 @@ export function FuelFormScreen() {
             step="0.1"
             placeholder="0"
             suffix="L"
+            value={liters}
+            onChange={(e) => setLiters(e.target.value)}
             required
           />
         </div>
@@ -92,24 +220,62 @@ export function FuelFormScreen() {
             step="1"
             placeholder="0"
             suffix={readingUnit}
+            value={reading}
+            onChange={(e) => setReading(e.target.value)}
             required
           />
-          {measurement === "horimetro" && (
-            <p className="text-xs text-muted-foreground">
-              Última leitura registrada: {lastReadingLabel}
-            </p>
-          )}
+        </div>
+
+        <div className="space-y-2">
+          <FormFieldLabel htmlFor="posto">Posto (opcional)</FormFieldLabel>
+          <Select
+            value={postoId}
+            onValueChange={(v) => setPostoId(v === "comboio" ? "" : v)}
+          >
+            <SelectTrigger id="posto" className="h-11 w-full">
+              <SelectValue placeholder="Comboio / não informado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="comboio">Comboio / não informado</SelectItem>
+              {postos.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                  {p.cidadeUf ? ` · ${p.cidadeUf}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
           <FormFieldLabel>Foto do medidor (opcional)</FormFieldLabel>
-          <PhotoUpload />
+          <PhotoUpload onSelect={setPhotoFile} />
+          {photoFile ? (
+            <p className="text-xs text-muted-foreground">
+              Foto anexada: {photoFile.name}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex items-start gap-2 rounded-lg bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
           <MapPin className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
-          <span>GPS capturado · Talhão 14 · -23.41, -51.93</span>
+          <span>
+            {coords
+              ? `GPS capturado · ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+              : gpsMsg}
+          </span>
         </div>
+
+        {erro ? (
+          <p className="text-sm text-destructive" role="alert">
+            {erro}
+          </p>
+        ) : null}
+        {sucesso ? (
+          <p className="text-sm font-medium text-emerald-500" role="status">
+            {sucesso}
+          </p>
+        ) : null}
 
         <div className="space-y-3 pt-2">
           <Button
