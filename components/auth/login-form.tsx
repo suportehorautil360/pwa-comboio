@@ -3,30 +3,45 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { login } from "@/lib/api/auth";
+import { saveSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function LoginForm() {
   const router = useRouter();
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [erro, setErro] = useState("");
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErro("");
     setIsLoading(true);
-    router.push("/dashboard");
+    try {
+      const { token, user } = await login(usuario.trim(), senha);
+      saveSession(token, user);
+      router.push("/dashboard");
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível entrar.");
+      setIsLoading(false);
+    }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">E-mail</Label>
+        <Label htmlFor="usuario">Usuário</Label>
         <Input
-          id="email"
-          name="email"
-          type="email"
-          placeholder="seu@email.com"
-          autoComplete="email"
+          id="usuario"
+          name="usuario"
+          type="text"
+          placeholder="seu.usuario"
+          autoComplete="username"
+          value={usuario}
+          onChange={(e) => setUsuario(e.target.value)}
           required
         />
       </div>
@@ -38,9 +53,16 @@ export function LoginForm() {
           type="password"
           placeholder="••••••••"
           autoComplete="current-password"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
           required
         />
       </div>
+      {erro ? (
+        <p className="text-sm text-destructive" role="alert">
+          {erro}
+        </p>
+      ) : null}
       <Button
         type="submit"
         variant="brand"
