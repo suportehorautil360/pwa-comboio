@@ -18,10 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  criarReabastecimento,
   ORIGENS_CARGA,
   type ReabastecimentoSource,
 } from "@/lib/api/reabastecimento";
+import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { getSessionUser } from "@/lib/session";
 
 export function ComboioRefillScreen() {
@@ -64,13 +64,14 @@ export function ComboioRefillScreen() {
 
     setIsSaving(true);
     try {
-      await criarReabastecimento({
+      await enqueue("reabastecimento", {
         prefeituraId: user.prefeituraId,
         sourceType: source,
         receivedLiters: litrosNum,
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
-      setSucesso("Carga do comboio registrada!");
+      void flushOutbox();
+      setSucesso("Salvo! Sincroniza quando houver sinal.");
       setLiters("");
       setInvoiceNumber("");
     } catch (e) {

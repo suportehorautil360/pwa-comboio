@@ -1,7 +1,10 @@
+"use client";
+
 import { Truck } from "lucide-react";
 
 import { brand } from "@/lib/design-system";
 import { Badge } from "@/components/ui/badge";
+import { useOutbox } from "@/lib/offline/use-outbox";
 
 type FieldHeaderProps = {
   /** Nome do operador logado (ex.: "J. Ferreira"). */
@@ -16,6 +19,13 @@ export function FieldHeader({
   papel = "COMBOÍSTA",
   online = true,
 }: FieldHeaderProps) {
+  const { pendentes, falhos } = useOutbox();
+
+  let status = online ? "Sincronizado" : "Offline";
+  if (falhos > 0) status = `${falhos} com erro`;
+  else if (pendentes > 0)
+    status = `${pendentes} pendente${pendentes > 1 ? "s" : ""}`;
+
   return (
     <header className="space-y-4">
       <div className="flex items-center justify-between">
@@ -29,7 +39,7 @@ export function FieldHeader({
           {online ? "Online" : "Offline"}
         </div>
         <Badge variant="outline" className="uppercase tracking-wider">
-          {online ? "Sincronizado" : "Pendente"}
+          {status}
         </Badge>
       </div>
 

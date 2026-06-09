@@ -23,12 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  criarAbastecimento,
   listarEquipamentos,
   listarPostos,
   type EquipamentoApi,
   type PostoApi,
 } from "@/lib/api/abastecimento";
+import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { getSessionUser } from "@/lib/session";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -120,7 +120,7 @@ export function FuelFormScreen() {
     setIsSaving(true);
     try {
       const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
-      await criarAbastecimento({
+      await enqueue("abastecimento", {
         prefeituraId: pid,
         plateOrChassis: equipment.trim().toUpperCase(),
         liters: litrosNum,
@@ -131,7 +131,8 @@ export function FuelFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      setSucesso("Abastecimento registrado!");
+      void flushOutbox();
+      setSucesso("Salvo! Sincroniza quando houver sinal.");
       setEquipment("");
       setLiters("");
       setReading("");

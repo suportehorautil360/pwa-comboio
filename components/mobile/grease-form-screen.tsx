@@ -15,10 +15,8 @@ import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
-import {
-  criarLubrificacao,
-  PONTOS_ENGRAXE,
-} from "@/lib/api/lubrificacao";
+import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
+import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { getSessionUser } from "@/lib/session";
 
 export function GreaseFormScreen() {
@@ -107,7 +105,7 @@ export function GreaseFormScreen() {
 
     setIsSaving(true);
     try {
-      await criarLubrificacao({
+      await enqueue("lubrificacao", {
         prefeituraId: user.prefeituraId,
         plateOrChassis: equipment.trim().toUpperCase(),
         comboistaNome: user.nome,
@@ -118,7 +116,8 @@ export function GreaseFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      setSucesso("Engraxe registrado!");
+      void flushOutbox();
+      setSucesso("Salvo! Sincroniza quando houver sinal.");
       setEquipment("");
       setReading("");
       setPontos([]);
