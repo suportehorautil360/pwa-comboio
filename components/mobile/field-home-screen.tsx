@@ -128,9 +128,10 @@ export function FieldHomeScreen() {
             subtitle="Lubrificação de pontos"
           />
           <ActionCard
+            href="/reabastecer"
             icon={ArrowDownToLine}
             title="Reabastecer comboio"
-            subtitle="Em breve"
+            subtitle="Carga no posto/tanque"
           />
         </div>
       </section>
