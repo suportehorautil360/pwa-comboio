@@ -34,6 +34,39 @@ export async function getTanqueComboio(
   return r.data?.[0] ?? null;
 }
 
+export interface HistoricoSummary {
+  totalLitersToday: number;
+  totalAbastecimentosToday: number;
+  totalEngraxeToday: number;
+}
+
+export interface HistoricoGroup {
+  dateLabel: string;
+  items: LancamentoItem[];
+}
+
+export interface HistoricoData {
+  summary: HistoricoSummary;
+  groups: HistoricoGroup[];
+}
+
+const RESUMO_VAZIO: HistoricoSummary = {
+  totalLitersToday: 0,
+  totalAbastecimentosToday: 0,
+  totalEngraxeToday: 0,
+};
+
+/** Histórico completo (resumo do dia + lançamentos agrupados por data). */
+export async function getHistorico(
+  prefeituraId: string,
+): Promise<HistoricoData> {
+  const r = await api.get<{
+    summary?: HistoricoSummary;
+    groups?: HistoricoGroup[];
+  }>(`/movimentacoes/${prefeituraId}`);
+  return { summary: r.summary ?? RESUMO_VAZIO, groups: r.groups ?? [] };
+}
+
 /** Últimos lançamentos (abastecimento + lubrificação + reabastecimento). */
 export async function getUltimosLancamentos(
   prefeituraId: string,

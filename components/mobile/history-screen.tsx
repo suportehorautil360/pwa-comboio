@@ -1,54 +1,74 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Fuel, Sun } from "lucide-react";
 
 import { ActivityItem } from "@/components/mobile/activity-item";
 import { FieldHeader } from "@/components/mobile/field-header";
 import { HistoryStatCard } from "@/components/mobile/history-stat-card";
+import {
+  getHistorico,
+  type HistoricoGroup,
+  type HistoricoSummary,
+} from "@/lib/api/dashboard";
+import { getSessionUser } from "@/lib/session";
 
-const stats = [
-  { value: "2.840", label: "L hoje" },
-  { value: "11", label: "Abastec." },
-  { value: "4", label: "Engraxe", valueClassName: "text-success" },
-];
-
-const todayActivities = [
-  {
-    icon: Fuel,
-    code: "ABC-1234",
-    description: "Escavadeira · 4.812 h",
-    value: "320 L",
-    valueClassName: "text-brand",
-    time: "14:20",
-  },
-  {
-    icon: Sun,
-    code: "9BWZZZ377",
-    description: "Pá carregadeira · 4 pontos",
-    value: "engraxe",
-    valueClassName: "text-success",
-    time: "13:55",
-  },
-  {
-    icon: Fuel,
-    code: "DEF-5678",
-    description: "Retroescavadeira · 2.104 h",
-    value: "180 L",
-    valueClassName: "text-brand",
-    time: "11:30",
-  },
-  {
-    icon: Fuel,
-    code: "GHI-9012",
-    description: "Caminhão · 89.420 km",
-    value: "450 L",
-    valueClassName: "text-brand",
-    time: "09:15",
-  },
-];
+const RESUMO_VAZIO: HistoricoSummary = {
+  totalLitersToday: 0,
+  totalAbastecimentosToday: 0,
+  totalEngraxeToday: 0,
+};
 
 export function HistoryScreen() {
+  const router = useRouter();
+  const [nome, setNome] = useState("");
+  const [summary, setSummary] = useState<HistoricoSummary>(RESUMO_VAZIO);
+  const [groups, setGroups] = useState<HistoricoGroup[]>([]);
+  const [online, setOnline] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const user = getSessionUser();
+    if (!user?.prefeituraId) {
+      router.push("/");
+      return;
+    }
+    const pid = user.prefeituraId;
+    let ativo = true;
+    void (async () => {
+      if (ativo) setNome(user.nome);
+      try {
+        const h = await getHistorico(pid);
+        if (ativo) {
+          setSummary(h.summary);
+          setGroups(h.groups);
+        }
+      } catch {
+        /* mantém vazio */
+      } finally {
+        if (ativo) setLoading(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    queueMicrotask(sync);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
   return (
     <div className="mx-auto w-full max-w-lg space-y-6">
-      <FieldHeader />
+      <FieldHeader nome={nome} online={online} />
 
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -58,26 +78,50 @@ export function HistoryScreen() {
       </div>
 
       <div className="flex gap-2">
-        {stats.map((stat) => (
-          <HistoryStatCard
-            key={stat.label}
-            value={stat.value}
-            label={stat.label}
-            valueClassName={stat.valueClassName}
-          />
-        ))}
+        <HistoryStatCard
+          value={summary.totalLitersToday.toLocaleString("pt-BR")}
+          label="L hoje"
+        />
+        <HistoryStatCard
+          value={String(summary.totalAbastecimentosToday)}
+          label="Abastec."
+        />
+        <HistoryStatCard
+          value={String(summary.totalEngraxeToday)}
+          label="Engraxe"
+          valueClassName="text-success"
+        />
       </div>
 
-      <section className="space-y-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Hoje · 03 jun
+      {groups.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">
+          {loading ? "Carregando…" : "Nenhum lançamento ainda."}
         </p>
-        <div className="space-y-2">
-          {todayActivities.map((activity) => (
-            <ActivityItem key={`${activity.code}-${activity.time}`} {...activity} />
-          ))}
-        </div>
-      </section>
+      ) : (
+        groups.map((group) => (
+          <section key={group.dateLabel} className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              {group.dateLabel}
+            </p>
+            <div className="space-y-2">
+              {group.items.map((item) => {
+                const ehEngraxe = item.tipo === "lubrificacao";
+                return (
+                  <ActivityItem
+                    key={`${item.tipo}-${item.id}`}
+                    icon={ehEngraxe ? Sun : Fuel}
+                    code={item.plate}
+                    description={item.equipmentLabel}
+                    value={item.rightLabel}
+                    valueClassName={ehEngraxe ? "text-success" : "text-brand"}
+                    time={item.time}
+                  />
+                );
+              })}
+            </div>
+          </section>
+        ))
+      )}
     </div>
   );
 }
