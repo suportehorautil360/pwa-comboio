@@ -2,7 +2,6 @@ import { Settings2 } from "lucide-react";
 import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/login-form";
-import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { brand } from "@/lib/design-system";
 import {
   Card,
@@ -43,8 +42,6 @@ export default function LoginPage() {
           Recuperar acesso
         </Link>
       </p>
-
-      <InstallPrompt />
     </div>
   );
 }

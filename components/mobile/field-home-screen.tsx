@@ -10,6 +10,7 @@ import { FieldHeader } from "@/components/mobile/field-header";
 import { FuelGauge } from "@/components/mobile/fuel-gauge";
 import { SectionHeading } from "@/components/mobile/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import {
   getTanqueComboio,
   getUltimosLancamentos,
@@ -178,6 +179,8 @@ export function FieldHomeScreen() {
           )}
         </div>
       </section>
+
+      <InstallPrompt />
     </div>
   );
 }

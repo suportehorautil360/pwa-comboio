@@ -11,9 +11,9 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 /**
- * Prompt de instalação do PWA. No Chromium captura o `beforeinstallprompt` e
- * mostra um botão; no iOS (Safari) mostra a instrução do "Adicionar à Tela de
- * Início". Some quando o app já está instalado (display-mode: standalone).
+ * Botão "Instalar app" fixo. Ao clicar: dispara o diálogo nativo quando o
+ * navegador disponibiliza (Chromium); senão revela as instruções (iOS ou menu
+ * do navegador). Some apenas quando o app já está instalado (standalone).
  */
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
@@ -21,6 +21,7 @@ export function InstallPrompt() {
   );
   const [isIOS, setIsIOS] = useState(false);
   const [instalado, setInstalado] = useState(false);
+  const [ajuda, setAjuda] = useState(false);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -49,41 +50,54 @@ export function InstallPrompt() {
   }, []);
 
   async function instalar() {
-    if (!deferred) return;
-    await deferred.prompt();
-    await deferred.userChoice;
-    setDeferred(null);
+    if (deferred) {
+      await deferred.prompt();
+      await deferred.userChoice;
+      setDeferred(null);
+      return;
+    }
+    setAjuda((v) => !v);
   }
 
   if (instalado) return null;
 
-  if (deferred) {
-    return (
+  return (
+    <div className="space-y-2">
       <Button
         type="button"
         variant="outline"
-        className="mt-6 gap-2"
+        className="w-full gap-2"
         onClick={instalar}
       >
         <Download className="size-4" aria-hidden />
         Instalar app
       </Button>
-    );
-  }
-
-  if (isIOS) {
-    return (
-      <p className="mt-6 max-w-xs text-center text-xs text-muted-foreground">
-        Para instalar, toque em{" "}
-        <Share className="inline size-3.5 align-text-bottom" aria-hidden /> e
-        depois{" "}
-        <span className="font-medium text-foreground">
-          &quot;Adicionar à Tela de Início&quot;
-        </span>
-        .
-      </p>
-    );
-  }
-
-  return null;
+      {ajuda && (
+        <p className="px-1 text-center text-xs text-muted-foreground">
+          {isIOS ? (
+            <>
+              Toque em{" "}
+              <Share
+                className="inline size-3.5 align-text-bottom"
+                aria-hidden
+              />{" "}
+              e depois{" "}
+              <span className="font-medium text-foreground">
+                &quot;Adicionar à Tela de Início&quot;
+              </span>
+              .
+            </>
+          ) : (
+            <>
+              No menu do navegador (⋮), escolha{" "}
+              <span className="font-medium text-foreground">
+                &quot;Instalar app&quot;
+              </span>{" "}
+              ou &quot;Adicionar à tela inicial&quot;.
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
 }
