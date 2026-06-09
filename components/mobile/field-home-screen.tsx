@@ -122,9 +122,10 @@ export function FieldHomeScreen() {
         />
         <div className="grid grid-cols-2 gap-3">
           <ActionCard
+            href="/engraxar"
             icon={Sun}
             title="Engraxar"
-            subtitle="Em breve"
+            subtitle="Lubrificação de pontos"
           />
           <ActionCard
             icon={ArrowDownToLine}
