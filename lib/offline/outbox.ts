@@ -23,6 +23,16 @@ export interface OutboxCounts {
   falhos: number;
 }
 
+/** Linha exibível de um item da fila (pendente/erro) p/ dashboard e histórico. */
+export interface LancamentoPendente {
+  id: string;
+  kind: OutboxKind;
+  code: string;
+  description: string;
+  value: string;
+  status: "pendente" | "erro";
+}
+
 const PATHS: Record<OutboxKind, string> = {
   abastecimento: "/abastecimentos",
   lubrificacao: "/lubrificacoes",
@@ -105,6 +115,57 @@ export async function getCounts(): Promise<OutboxCounts> {
   return {
     pendentes: all.filter((i) => !i.failed).length,
     falhos: all.filter((i) => i.failed).length,
+  };
+}
+
+/** Itens da fila, mais recentes primeiro. */
+export async function listItems(): Promise<OutboxItem[]> {
+  return (await listAll()).reverse();
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+}
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/** Mapeia um item da fila para uma linha exibível. */
+export function itemParaLancamento(item: OutboxItem): LancamentoPendente {
+  const p = asRecord(item.payload);
+  const status: LancamentoPendente["status"] = item.failed ? "erro" : "pendente";
+
+  if (item.kind === "lubrificacao") {
+    const pontos = Array.isArray(p.greasedPoints) ? p.greasedPoints.length : 0;
+    return {
+      id: item.id,
+      kind: item.kind,
+      code: str(p.plateOrChassis) || "—",
+      description: `${pontos} ponto${pontos !== 1 ? "s" : ""}`,
+      value: "engraxe",
+      status,
+    };
+  }
+  if (item.kind === "reabastecimento") {
+    return {
+      id: item.id,
+      kind: item.kind,
+      code: "Comboio",
+      description: "Reabastecimento",
+      value: `${num(p.receivedLiters)} L`,
+      status,
+    };
+  }
+  return {
+    id: item.id,
+    kind: item.kind,
+    code: str(p.plateOrChassis) || "—",
+    description: "Abastecimento",
+    value: `${num(p.liters)} L`,
+    status,
   };
 }
 

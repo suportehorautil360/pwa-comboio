@@ -16,6 +16,7 @@ import {
   type LancamentoItem,
   type TanqueComboio,
 } from "@/lib/api/dashboard";
+import { useOutboxItems } from "@/lib/offline/use-outbox";
 import { getSessionUser } from "@/lib/session";
 
 function labelComboio(t: TanqueComboio): string {
@@ -35,6 +36,7 @@ export function FieldHomeScreen() {
   const [lancamentos, setLancamentos] = useState<LancamentoItem[]>([]);
   const [online, setOnline] = useState(true);
   const [loading, setLoading] = useState(true);
+  const pendentes = useOutboxItems();
 
   useEffect(() => {
     const user = getSessionUser();
@@ -139,7 +141,22 @@ export function FieldHomeScreen() {
       <section className="space-y-3">
         <SectionHeading title="Últimos Lançamentos" />
         <div className="space-y-2">
-          {lancamentos.length === 0 ? (
+          {pendentes.map((p) => (
+            <ActivityItem
+              key={`out-${p.id}`}
+              icon={p.kind === "lubrificacao" ? Sun : Fuel}
+              code={p.code}
+              description={p.description}
+              value={p.value}
+              valueClassName={
+                p.status === "erro"
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              }
+              time={p.status === "erro" ? "erro" : "pendente"}
+            />
+          ))}
+          {lancamentos.length === 0 && pendentes.length === 0 ? (
             <p className="px-1 text-sm text-muted-foreground">
               {loading ? "Carregando…" : "Nenhum lançamento ainda."}
             </p>

@@ -5,7 +5,10 @@ import { useEffect, useState } from "react";
 import {
   flushOutbox,
   getCounts,
+  itemParaLancamento,
+  listItems,
   subscribe,
+  type LancamentoPendente,
   type OutboxCounts,
 } from "./outbox";
 
@@ -43,4 +46,29 @@ export function useOutbox(): OutboxCounts {
   }, []);
 
   return counts;
+}
+
+/**
+ * Itens da fila (pendentes/erro) para exibir nas listas. Só leitura — o
+ * disparo da sincronização fica no useOutbox (montado no FieldHeader).
+ */
+export function useOutboxItems(): LancamentoPendente[] {
+  const [items, setItems] = useState<LancamentoPendente[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its.map(itemParaLancamento));
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
 }

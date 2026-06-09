@@ -12,6 +12,7 @@ import {
   type HistoricoGroup,
   type HistoricoSummary,
 } from "@/lib/api/dashboard";
+import { useOutboxItems } from "@/lib/offline/use-outbox";
 import { getSessionUser } from "@/lib/session";
 
 const RESUMO_VAZIO: HistoricoSummary = {
@@ -27,6 +28,7 @@ export function HistoryScreen() {
   const [groups, setGroups] = useState<HistoricoGroup[]>([]);
   const [online, setOnline] = useState(true);
   const [loading, setLoading] = useState(true);
+  const pendentes = useOutboxItems();
 
   useEffect(() => {
     const user = getSessionUser();
@@ -93,7 +95,32 @@ export function HistoryScreen() {
         />
       </div>
 
-      {groups.length === 0 ? (
+      {pendentes.length > 0 && (
+        <section className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Pendentes de envio
+          </p>
+          <div className="space-y-2">
+            {pendentes.map((p) => (
+              <ActivityItem
+                key={`out-${p.id}`}
+                icon={p.kind === "lubrificacao" ? Sun : Fuel}
+                code={p.code}
+                description={p.description}
+                value={p.value}
+                valueClassName={
+                  p.status === "erro"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+                }
+                time={p.status === "erro" ? "erro" : "pendente"}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {groups.length === 0 && pendentes.length === 0 ? (
         <p className="px-1 text-sm text-muted-foreground">
           {loading ? "Carregando…" : "Nenhum lançamento ainda."}
         </p>
