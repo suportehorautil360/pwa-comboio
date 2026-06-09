@@ -3,21 +3,33 @@ import { Truck } from "lucide-react";
 import { brand } from "@/lib/design-system";
 import { Badge } from "@/components/ui/badge";
 
-const operator = {
-  role: "COMBOÍSTA",
-  name: "J. FERREIRA",
+type FieldHeaderProps = {
+  /** Nome do operador logado (ex.: "J. Ferreira"). */
+  nome?: string;
+  /** Cargo/papel. Padrão: COMBOÍSTA. */
+  papel?: string;
+  online?: boolean;
 };
 
-export function FieldHeader() {
+export function FieldHeader({
+  nome,
+  papel = "COMBOÍSTA",
+  online = true,
+}: FieldHeaderProps) {
   return (
     <header className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-success">
-          <span className="size-2 rounded-full bg-success" aria-hidden />
-          Online
+        <div
+          className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider ${online ? "text-success" : "text-muted-foreground"}`}
+        >
+          <span
+            className={`size-2 rounded-full ${online ? "bg-success" : "bg-muted-foreground"}`}
+            aria-hidden
+          />
+          {online ? "Online" : "Offline"}
         </div>
         <Badge variant="outline" className="uppercase tracking-wider">
-          Sincronizado
+          {online ? "Sincronizado" : "Pendente"}
         </Badge>
       </div>
 
@@ -30,7 +42,8 @@ export function FieldHeader() {
             {brand.name}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            {operator.role} · {operator.name}
+            {papel}
+            {nome ? ` · ${nome}` : ""}
           </p>
         </div>
       </div>
