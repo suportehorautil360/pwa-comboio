@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, Download } from "lucide-react";
+import { CalendarDays, Camera, ChevronRight, Download } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
@@ -338,6 +339,26 @@ export function MeuPontoScreen() {
           ))
         )}
       </div>
+
+      <Link href="/espelho" className="block">
+        <Card className="ring-border/50 transition-colors hover:bg-muted/40">
+          <CardContent className="flex items-center gap-3 pt-0">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
+              <CalendarDays className="size-5 text-brand" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">Espelho detalhado</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Mês a mês, detalhe do dia e exportar PDF
+              </p>
+            </div>
+            <ChevronRight
+              className="size-5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          </CardContent>
+        </Card>
+      </Link>
     </div>
   );
 }
