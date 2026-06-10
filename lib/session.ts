@@ -7,6 +7,10 @@ export interface SessionUser {
   vinculo: string;
   prefeituraId: string;
   postoId?: string | null;
+  /** CPF do funcionário — compõe o ledger do ponto (Portaria 671). */
+  cpf?: string;
+  /** Id do funcionário — identidade do ponto por pessoa (gate diário). */
+  funcionarioId?: string;
 }
 
 const TOKEN_KEY = "hu360_token";

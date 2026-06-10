@@ -6,12 +6,16 @@ import { Camera, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+type FacingMode = "environment" | "user";
+
 type PhotoUploadProps = {
   className?: string;
   onSelect?: (file: File | null) => void;
+  /** Lente inicial: "environment" (traseira, padrão) ou "user" (frontal/selfie). */
+  defaultFacing?: FacingMode;
+  /** Texto do botão e título da câmera. */
+  label?: string;
 };
-
-type FacingMode = "environment" | "user";
 
 /** Câmera (getUserMedia) só funciona em contexto seguro: https ou localhost. */
 function temCamera(): boolean {
@@ -23,14 +27,19 @@ function temCamera(): boolean {
   );
 }
 
-export function PhotoUpload({ className, onSelect }: PhotoUploadProps) {
+export function PhotoUpload({
+  className,
+  onSelect,
+  defaultFacing = "environment",
+  label = "Tirar foto do painel",
+}: PhotoUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<string | null>(null);
 
   const [cameraAberta, setCameraAberta] = useState(false);
-  const [facing, setFacing] = useState<FacingMode>("environment");
+  const [facing, setFacing] = useState<FacingMode>(defaultFacing);
   const [erroCamera, setErroCamera] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -203,7 +212,7 @@ export function PhotoUpload({ className, onSelect }: PhotoUploadProps) {
           <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <Camera className="size-5" aria-hidden />
           </div>
-          <span className="text-sm font-medium">Tirar foto do painel</span>
+          <span className="text-sm font-medium">{label}</span>
         </button>
       )}
 
@@ -227,7 +236,7 @@ export function PhotoUpload({ className, onSelect }: PhotoUploadProps) {
             >
               <X className="size-5" aria-hidden />
             </button>
-            <span className="text-sm font-medium">Foto do medidor</span>
+            <span className="text-sm font-medium">{label}</span>
             <button
               type="button"
               onClick={trocarLente}

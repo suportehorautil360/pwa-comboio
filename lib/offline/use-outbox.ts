@@ -59,7 +59,11 @@ export function useOutboxItems(): LancamentoPendente[] {
     let ativo = true;
     const atualizar = () => {
       void listItems().then((its) => {
-        if (ativo) setItems(its.map(itemParaLancamento));
+        // Ponto sincroniza pela mesma outbox, mas não é um lançamento de frota.
+        if (ativo)
+          setItems(
+            its.filter((i) => i.kind !== "ponto").map(itemParaLancamento),
+          );
       });
     };
     const unsub = subscribe(atualizar);

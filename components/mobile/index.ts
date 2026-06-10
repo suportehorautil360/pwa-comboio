@@ -15,5 +15,6 @@ export { MeasurementToggle } from "./measurement-toggle";
 export { MobileShell } from "./mobile-shell";
 export { PageBackHeader } from "./page-back-header";
 export { PhotoUpload } from "./photo-upload";
+export { PontoScreen } from "./ponto-screen";
 export { ProfileScreen } from "./profile-screen";
 export { SectionHeading } from "./section-heading";

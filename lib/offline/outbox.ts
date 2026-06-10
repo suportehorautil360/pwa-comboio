@@ -6,7 +6,11 @@
  */
 import { api, ApiError } from "../api/client";
 
-export type OutboxKind = "abastecimento" | "lubrificacao" | "reabastecimento";
+export type OutboxKind =
+  | "abastecimento"
+  | "lubrificacao"
+  | "reabastecimento"
+  | "ponto";
 
 export interface OutboxItem {
   id: string;
@@ -37,6 +41,7 @@ const PATHS: Record<OutboxKind, string> = {
   abastecimento: "/abastecimentos",
   lubrificacao: "/lubrificacoes",
   reabastecimento: "/reabastecimentos",
+  ponto: "/time-records",
 };
 
 const DB_NAME = "hu360-comboio";
@@ -146,6 +151,16 @@ export function itemParaLancamento(item: OutboxItem): LancamentoPendente {
       code: str(p.plateOrChassis) || "—",
       description: `${pontos} ponto${pontos !== 1 ? "s" : ""}`,
       value: "engraxe",
+      status,
+    };
+  }
+  if (item.kind === "ponto") {
+    return {
+      id: item.id,
+      kind: item.kind,
+      code: str(p.tipo) || "ponto",
+      description: "Batida de ponto",
+      value: "ponto",
       status,
     };
   }

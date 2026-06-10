@@ -42,6 +42,8 @@ export async function login(
       perfil: f.cargo,
       vinculo: "operador",
       prefeituraId: f.prefeituraId,
+      cpf: f.cpf,
+      funcionarioId: f.id,
     },
   };
 }
