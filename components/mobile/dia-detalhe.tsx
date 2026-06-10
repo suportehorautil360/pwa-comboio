@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Camera, X } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,10 +28,13 @@ export function DiaDetalhe({
   dia,
   batidas,
   onVoltar,
+  onEditar,
 }: {
   dia: string;
   batidas: BatidaEfetiva[];
   onVoltar: () => void;
+  /** Quando definido, mostra "Editar" em cada batida existente. */
+  onEditar?: (b: BatidaEfetiva) => void;
 }) {
   const [fotoAmpliada, setFotoAmpliada] = useState("");
 
@@ -91,6 +94,17 @@ export function DiaDetalhe({
                       </span>
                     ) : null}
                   </div>
+                  {reg && onEditar ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Editar horário"
+                      onClick={() => onEditar(reg)}
+                    >
+                      <Pencil className="size-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
                 </div>
                 {reg?.ajustePendente && reg.horarioAjustePendente ? (
                   <p className="mt-1.5 text-xs text-muted-foreground">

@@ -66,4 +66,19 @@ export const pontoApi = {
     const r = await api.get<RespostaLista>(`/time-records/${prefeituraId}`);
     return r.data ?? [];
   },
+
+  /**
+   * Solicita correção do horário de uma batida (operador). Cria um ajuste no
+   * ledger, pendente de aprovação do gestor — não altera a batida original.
+   */
+  async editarHorario(
+    id: string,
+    timestampOriginal: string,
+    motivo?: string,
+  ): Promise<void> {
+    await api.post(`/time-records/update/${id}`, {
+      timestampOriginal,
+      ...(motivo?.trim() ? { motivo: motivo.trim() } : {}),
+    });
+  },
 };

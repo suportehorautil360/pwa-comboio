@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
 import { DiaDetalhe } from "@/components/mobile/dia-detalhe";
+import { EditarBatidaSheet } from "@/components/mobile/editar-batida-sheet";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,6 +84,7 @@ export function EspelhoScreen() {
     dia: string;
     batidas: BatidaEfetiva[];
   } | null>(null);
+  const [editando, setEditando] = useState<PontoRegistro | null>(null);
 
   const [expAberto, setExpAberto] = useState(false);
   const [expDe, setExpDe] = useState("");
@@ -229,11 +231,23 @@ export function EspelhoScreen() {
 
   if (diaDetalhe) {
     return (
-      <DiaDetalhe
-        dia={diaDetalhe.dia}
-        batidas={diaDetalhe.batidas}
-        onVoltar={() => setDiaDetalhe(null)}
-      />
+      <>
+        <DiaDetalhe
+          dia={diaDetalhe.dia}
+          batidas={diaDetalhe.batidas}
+          onVoltar={() => setDiaDetalhe(null)}
+          onEditar={(b) => setEditando(b)}
+        />
+        <EditarBatidaSheet
+          batida={editando}
+          onClose={() => setEditando(null)}
+          onSalvo={() => {
+            setEditando(null);
+            setDiaDetalhe(null);
+            void carregar();
+          }}
+        />
+      </>
     );
   }
 

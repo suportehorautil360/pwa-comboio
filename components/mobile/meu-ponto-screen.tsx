@@ -3,11 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Camera, ChevronRight, Download } from "lucide-react";
+import {
+  CalendarDays,
+  Camera,
+  ChevronRight,
+  Download,
+  ListChecks,
+  Pencil,
+} from "lucide-react";
 
+import { EditarBatidaSheet } from "@/components/mobile/editar-batida-sheet";
 import { FieldHeader } from "@/components/mobile/field-header";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { SolicitarAjustes } from "@/components/mobile/solicitar-ajustes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { configuracoesApi, type EmpresaConfig } from "@/lib/api/configuracoes";
@@ -85,6 +94,8 @@ export function MeuPontoScreen() {
   const [batendo, setBatendo] = useState<TipoPonto | null>(null);
   const [foto, setFoto] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [editando, setEditando] = useState<PontoRegistro | null>(null);
+  const [sucesso, setSucesso] = useState("");
 
   const carregar = useCallback(async () => {
     const u = getSessionUser();
@@ -209,6 +220,12 @@ export function MeuPontoScreen() {
         </p>
       ) : null}
 
+      {sucesso ? (
+        <p className="rounded-lg bg-success/10 px-3 py-2 text-sm text-success" role="status">
+          {sucesso}
+        </p>
+      ) : null}
+
       {/* Folha do dia */}
       <Card className="ring-border/50">
         <CardContent className="space-y-1 pt-0">
@@ -236,6 +253,17 @@ export function MeuPontoScreen() {
                       >
                         <Download className="size-3.5" aria-hidden />
                         Comprovante
+                      </Button>
+                    ) : null}
+                    {reg ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Editar horário"
+                        onClick={() => setEditando(reg)}
+                      >
+                        <Pencil className="size-3.5" aria-hidden />
                       </Button>
                     ) : null}
                     {!reg ? (
@@ -340,6 +368,38 @@ export function MeuPontoScreen() {
         )}
       </div>
 
+      {user ? (
+        <SolicitarAjustes
+          prefeituraId={user.prefeituraId}
+          nome={user.nome}
+          cpf={user.cpf}
+          batidas={efetivas}
+          onEnviado={() => void carregar()}
+        />
+      ) : null}
+
+      <Link href="/minhas-solicitacoes" className="block">
+        <Card className="ring-border/50 transition-colors hover:bg-muted/40">
+          <CardContent className="flex items-center gap-3 pt-0">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
+              <ListChecks className="size-5 text-brand" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                Minhas solicitações
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                Acompanhe o status dos seus pedidos
+              </p>
+            </div>
+            <ChevronRight
+              className="size-5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          </CardContent>
+        </Card>
+      </Link>
+
       <Link href="/espelho" className="block">
         <Card className="ring-border/50 transition-colors hover:bg-muted/40">
           <CardContent className="flex items-center gap-3 pt-0">
@@ -359,6 +419,16 @@ export function MeuPontoScreen() {
           </CardContent>
         </Card>
       </Link>
+
+      <EditarBatidaSheet
+        batida={editando}
+        onClose={() => setEditando(null)}
+        onSalvo={() => {
+          setEditando(null);
+          setSucesso("Correção enviada — pendente de aprovação do gestor.");
+          void carregar();
+        }}
+      />
     </div>
   );
 }
