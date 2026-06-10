@@ -6,6 +6,10 @@ import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
 import { DiaDetalhe } from "@/components/mobile/dia-detalhe";
 import { EditarBatidaSheet } from "@/components/mobile/editar-batida-sheet";
+import {
+  IncluirBatidaSheet,
+  type IncluirAberto,
+} from "@/components/mobile/incluir-batida-sheet";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,6 +89,8 @@ export function EspelhoScreen() {
     batidas: BatidaEfetiva[];
   } | null>(null);
   const [editando, setEditando] = useState<PontoRegistro | null>(null);
+  const [incluirAberto, setIncluirAberto] = useState<IncluirAberto>(null);
+  const [sucesso, setSucesso] = useState("");
 
   const [expAberto, setExpAberto] = useState(false);
   const [expDe, setExpDe] = useState("");
@@ -231,23 +237,49 @@ export function EspelhoScreen() {
 
   if (diaDetalhe) {
     return (
-      <>
+      <div className="space-y-4">
+        {sucesso ? (
+          <p
+            className="mx-auto max-w-lg rounded-lg bg-success/10 px-3 py-2 text-sm text-success"
+            role="status"
+          >
+            {sucesso}
+          </p>
+        ) : null}
         <DiaDetalhe
           dia={diaDetalhe.dia}
           batidas={diaDetalhe.batidas}
           onVoltar={() => setDiaDetalhe(null)}
           onEditar={(b) => setEditando(b)}
+          onIncluir={(dia, tipo) => {
+            setSucesso("");
+            setIncluirAberto({ data: dia, tipo });
+          }}
         />
         <EditarBatidaSheet
           batida={editando}
           onClose={() => setEditando(null)}
           onSalvo={() => {
             setEditando(null);
-            setDiaDetalhe(null);
+            setSucesso("Correção enviada — pendente de aprovação do gestor.");
             void carregar();
           }}
         />
-      </>
+        {user ? (
+          <IncluirBatidaSheet
+            aberto={incluirAberto}
+            onClose={() => setIncluirAberto(null)}
+            onEnviado={(msg) => {
+              setIncluirAberto(null);
+              setSucesso(msg);
+              void carregar();
+            }}
+            prefeituraId={user.prefeituraId}
+            nome={user.nome}
+            cpf={user.cpf}
+          />
+        ) : null}
+      </div>
     );
   }
 

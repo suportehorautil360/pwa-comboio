@@ -3,6 +3,7 @@
  * Um recurso atende incluir / cancelar / abono / mensagem.
  */
 import { api } from "./client";
+import type { TipoPonto } from "./ponto";
 
 export type TipoSolicitacao = "incluir" | "cancelar" | "abono" | "mensagem";
 export type StatusSolicitacao = "pendente" | "aprovado" | "reprovado";
@@ -17,6 +18,8 @@ export interface SolicitacaoPonto {
   batidaId?: string | null;
   data?: string | null;
   timestampOriginal?: string | null;
+  /** Para tipo "incluir": qual batida do dia (default "entrada"). */
+  tipoBatida?: TipoPonto | null;
   observacao?: string | null;
   anexoDataUrl?: string | null;
   anexoNome?: string | null;
@@ -33,6 +36,8 @@ export interface CriarSolicitacaoInput {
   batidaId?: string;
   data?: string;
   timestampOriginal?: string;
+  /** Para tipo "incluir": qual batida do dia (default "entrada"). */
+  tipoBatida?: TipoPonto;
   observacao?: string;
   anexoDataUrl?: string;
   anexoNome?: string;

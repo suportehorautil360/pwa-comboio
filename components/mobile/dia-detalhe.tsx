@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Camera, Pencil, X } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,12 +29,15 @@ export function DiaDetalhe({
   batidas,
   onVoltar,
   onEditar,
+  onIncluir,
 }: {
   dia: string;
   batidas: BatidaEfetiva[];
   onVoltar: () => void;
   /** Quando definido, mostra "Editar" em cada batida existente. */
   onEditar?: (b: BatidaEfetiva) => void;
+  /** Quando definido, mostra "Incluir" nos slots sem batida. */
+  onIncluir?: (dia: string, tipo: TipoPonto) => void;
 }) {
   const [fotoAmpliada, setFotoAmpliada] = useState("");
 
@@ -103,6 +106,18 @@ export function DiaDetalhe({
                       onClick={() => onEditar(reg)}
                     >
                       <Pencil className="size-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
+                  {!reg && onIncluir ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={() => onIncluir(dia, tipo)}
+                    >
+                      <Plus className="size-3.5" aria-hidden />
+                      Incluir
                     </Button>
                   ) : null}
                 </div>

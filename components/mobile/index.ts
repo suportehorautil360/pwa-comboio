@@ -12,6 +12,7 @@ export { FormFieldLabel } from "./form-field-label";
 export { HistoryScreen } from "./history-screen";
 export { HistoryStatCard } from "./history-stat-card";
 export { FuelFormScreen } from "./fuel-form-screen";
+export { IncluirBatidaSheet } from "./incluir-batida-sheet";
 export { FuelGauge } from "./fuel-gauge";
 export { GreaseFormScreen } from "./grease-form-screen";
 export { InputWithSuffix } from "./input-with-suffix";

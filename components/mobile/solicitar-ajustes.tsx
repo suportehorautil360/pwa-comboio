@@ -10,9 +10,12 @@ import {
 } from "lucide-react";
 
 import { BottomSheet } from "@/components/mobile/bottom-sheet";
+import {
+  IncluirBatidaSheet,
+  type IncluirAberto,
+} from "@/components/mobile/incluir-batida-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -24,7 +27,7 @@ import { TIPOS_PONTO } from "@/lib/api/ponto";
 import { solicitacoesPontoApi } from "@/lib/api/solicitacoes-ponto";
 import type { BatidaEfetiva } from "@/lib/ponto/resolver-ledger";
 
-type Aberto = "incluir" | "cancelar" | "abono" | "mensagem" | null;
+type Aberto = "cancelar" | "abono" | "mensagem" | null;
 
 const OBS_MAX = 1000;
 const ANEXO_MAX_MB = 25;
@@ -128,15 +131,10 @@ export function SolicitarAjustes({
   onEnviado?: () => void;
 }) {
   const [aberto, setAberto] = useState<Aberto>(null);
+  const [incluirAberto, setIncluirAberto] = useState<IncluirAberto>(null);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [sucesso, setSucesso] = useState("");
-
-  // Incluir
-  const [incData, setIncData] = useState("");
-  const [incHora, setIncHora] = useState("");
-  const [incObs, setIncObs] = useState("");
-  const [incAnexo, setIncAnexo] = useState<File | null>(null);
 
   // Cancelar
   const [cancBatidaId, setCancBatidaId] = useState("");
@@ -153,12 +151,6 @@ export function SolicitarAjustes({
   function abrir(tipo: Exclude<Aberto, null>) {
     setErro("");
     setSucesso("");
-    if (tipo === "incluir") {
-      setIncData(hojeIso());
-      setIncHora("");
-      setIncObs("");
-      setIncAnexo(null);
-    }
     if (tipo === "cancelar") {
       setCancBatidaId("");
       setCancMotivo("");
@@ -182,34 +174,6 @@ export function SolicitarAjustes({
     setAberto(null);
     setSucesso(msg);
     onEnviado?.();
-  }
-
-  async function enviarIncluir() {
-    if (!incData || !incHora) {
-      setErro("Informe data e horário.");
-      return;
-    }
-    setErro("");
-    setEnviando(true);
-    try {
-      const timestampOriginal = new Date(`${incData}T${incHora}:00`).toISOString();
-      const anexoDataUrl = incAnexo ? await fileToDataUrl(incAnexo) : undefined;
-      await solicitacoesPontoApi.criar({
-        tipo: "incluir",
-        prefeituraId,
-        name: nome,
-        cpf,
-        data: incData,
-        timestampOriginal,
-        observacao: incObs.trim() || undefined,
-        anexoDataUrl,
-        anexoNome: incAnexo?.name,
-      });
-      concluir("Solicitação de inclusão enviada ao gestor.");
-    } catch {
-      setEnviando(false);
-      setErro("Não foi possível enviar. Verifique a conexão.");
-    }
   }
 
   async function enviarCancelar() {
@@ -307,7 +271,10 @@ export function SolicitarAjustes({
             type="button"
             variant="outline"
             className="h-auto flex-col gap-1.5 py-3 text-xs"
-            onClick={() => abrir("incluir")}
+            onClick={() => {
+              setSucesso("");
+              setIncluirAberto({});
+            }}
           >
             <CalendarPlus className="size-4" aria-hidden />
             Incluir batida
@@ -342,53 +309,18 @@ export function SolicitarAjustes({
         </div>
       </CardContent>
 
-      {/* Incluir batida */}
-      <BottomSheet
-        open={aberto === "incluir"}
-        onClose={fechar}
-        title="Incluir batida"
-      >
-        <p className="text-xs text-muted-foreground">
-          Para batidas esquecidas ou não gravadas. Vai para aprovação do gestor.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <Campo label="Data">
-            <Input
-              type="date"
-              value={incData}
-              onChange={(e) => setIncData(e.target.value)}
-              className="h-10"
-            />
-          </Campo>
-          <Campo label="Horário">
-            <Input
-              type="time"
-              value={incHora}
-              onChange={(e) => setIncHora(e.target.value)}
-              className="h-10"
-            />
-          </Campo>
-        </div>
-        <Campo label="Observação">
-          <Textarea
-            placeholder="Ex.: esqueci de marcar a volta do almoço"
-            maxLength={OBS_MAX}
-            value={incObs}
-            onChange={(e) => setIncObs(e.target.value)}
-          />
-        </Campo>
-        <Anexo file={incAnexo} onFile={setIncAnexo} />
-        {erro ? <p className="text-sm text-destructive">{erro}</p> : null}
-        <Button
-          type="button"
-          variant="brand"
-          className="w-full"
-          disabled={enviando}
-          onClick={() => void enviarIncluir()}
-        >
-          {enviando ? "Enviando…" : "Enviar solicitação"}
-        </Button>
-      </BottomSheet>
+      <IncluirBatidaSheet
+        aberto={incluirAberto}
+        onClose={() => setIncluirAberto(null)}
+        onEnviado={(msg) => {
+          setIncluirAberto(null);
+          setSucesso(msg);
+          onEnviado?.();
+        }}
+        prefeituraId={prefeituraId}
+        nome={nome}
+        cpf={cpf}
+      />
 
       {/* Cancelar batida */}
       <BottomSheet
@@ -449,11 +381,11 @@ export function SolicitarAjustes({
           Informe o dia, o motivo e — se houver — anexe o comprovante (atestado).
         </p>
         <Campo label="Data do abono">
-          <Input
+          <input
             type="date"
             value={aboData}
             onChange={(e) => setAboData(e.target.value)}
-            className="h-10"
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
           />
         </Campo>
         <Campo label="Motivo">
