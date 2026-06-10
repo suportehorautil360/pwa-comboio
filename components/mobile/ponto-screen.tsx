@@ -7,7 +7,6 @@ import { Clock, LogOut } from "lucide-react";
 import { FieldHeader } from "@/components/mobile/field-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { featureFlagsApi } from "@/lib/api/feature-flags";
 import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { useOutbox } from "@/lib/offline/use-outbox";
@@ -164,16 +163,10 @@ export function PontoScreen() {
       <RelogioAoVivo />
 
       <div className="space-y-2">
-        <label htmlFor="ponto-nome" className="text-sm font-medium">
-          Seu nome
-        </label>
-        <Input
-          id="ponto-nome"
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          placeholder="Nome completo"
-          className="h-11"
-        />
+        <span className="text-sm font-medium">Funcionário</span>
+        <div className="flex h-11 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+          {nome || "—"}
+        </div>
       </div>
 
       <div className="space-y-2">
