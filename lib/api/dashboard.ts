@@ -1,4 +1,4 @@
-/** Dashboard do comboista — tanque (/tanks) + últimos lançamentos (/movimentacoes). */
+/** Dashboard do comboista — tanque (/tanks) + histórico de lançamentos (/historico). */
 import { api } from "./client";
 
 export interface TanqueComboio {
@@ -63,7 +63,7 @@ export async function getHistorico(
   const r = await api.get<{
     summary?: HistoricoSummary;
     groups?: HistoricoGroup[];
-  }>(`/movimentacoes/${prefeituraId}`);
+  }>(`/historico/${prefeituraId}`);
   return { summary: r.summary ?? RESUMO_VAZIO, groups: r.groups ?? [] };
 }
 
@@ -73,7 +73,7 @@ export async function getUltimosLancamentos(
   limite = 6,
 ): Promise<LancamentoItem[]> {
   const r = await api.get<{ groups?: { items?: LancamentoItem[] }[] }>(
-    `/movimentacoes/${prefeituraId}`,
+    `/historico/${prefeituraId}`,
   );
   const itens = (r.groups ?? []).flatMap((g) => g.items ?? []);
   return itens.slice(0, limite);
