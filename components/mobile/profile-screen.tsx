@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, Truck, User } from "lucide-react";
+import { ChevronRight, Clock, LogOut, Truck, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,6 +107,26 @@ export function ProfileScreen() {
           <Linha label="Sincronização" value={syncLabel} />
         </CardContent>
       </Card>
+
+      <Link href="/meu-ponto" className="block">
+        <Card className="ring-border/50 transition-colors hover:bg-muted/40">
+          <CardContent className="flex items-center gap-3 pt-0">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 ring-1 ring-brand/30">
+              <Clock className="size-5 text-brand" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">Meu ponto</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Batidas do dia, histórico e comprovantes
+              </p>
+            </div>
+            <ChevronRight
+              className="size-5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          </CardContent>
+        </Card>
+      </Link>
 
       <Card className="ring-border/50">
         <CardContent className="space-y-3 pt-0">

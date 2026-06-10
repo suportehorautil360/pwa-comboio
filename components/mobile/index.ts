@@ -12,6 +12,7 @@ export { FuelGauge } from "./fuel-gauge";
 export { GreaseFormScreen } from "./grease-form-screen";
 export { InputWithSuffix } from "./input-with-suffix";
 export { MeasurementToggle } from "./measurement-toggle";
+export { MeuPontoScreen } from "./meu-ponto-screen";
 export { MobileShell } from "./mobile-shell";
 export { PageBackHeader } from "./page-back-header";
 export { PhotoUpload } from "./photo-upload";
