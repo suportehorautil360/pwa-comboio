@@ -159,7 +159,7 @@ export function FuelFormScreen() {
     setIsSaving(true);
     try {
       const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
-      const { synced } = await submit("abastecimento", {
+      await submit("abastecimento", {
         prefeituraId: pid,
         comboioId: comboioId || undefined,
         funcionarioId: user?.funcionarioId,
@@ -172,16 +172,9 @@ export function FuelFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      setSucesso(
-        synced
-          ? "Abastecimento registrado!"
-          : "Sem sinal agora — salvo no aparelho, sincroniza sozinho.",
-      );
-      setEquipment("");
-      setLiters("");
-      setReading("");
-      setPostoId("");
-      setPhotoFile(null);
+      // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      router.replace("/dashboard");
+      return;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {

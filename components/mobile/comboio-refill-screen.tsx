@@ -100,7 +100,7 @@ export function ComboioRefillScreen() {
 
     setIsSaving(true);
     try {
-      const { synced } = await submit("reabastecimento", {
+      await submit("reabastecimento", {
         prefeituraId: user.prefeituraId,
         comboioId,
         funcionarioId: user.funcionarioId,
@@ -108,13 +108,9 @@ export function ComboioRefillScreen() {
         receivedLiters: litrosNum,
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
-      setSucesso(
-        synced
-          ? "Carga registrada no comboio!"
-          : "Sem sinal agora — salvo no aparelho, sincroniza sozinho.",
-      );
-      setLiters("");
-      setInvoiceNumber("");
+      // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      router.replace("/dashboard");
+      return;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
