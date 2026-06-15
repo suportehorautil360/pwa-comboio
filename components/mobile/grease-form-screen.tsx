@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
 import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
 import { submit } from "@/lib/offline/outbox";
+import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
 import { getSessionUser } from "@/lib/session";
 
@@ -128,7 +129,11 @@ export function GreaseFormScreen() {
       router.replace("/dashboard");
       return;
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      if (e instanceof ApiError && e.status === 404) {
+        setErro("Equipamento não encontrado. Confira a placa ou o chassi.");
+      } else {
+        setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      }
     } finally {
       setIsSaving(false);
     }
