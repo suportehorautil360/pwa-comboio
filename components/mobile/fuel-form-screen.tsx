@@ -31,6 +31,7 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
 import { submit } from "@/lib/offline/outbox";
+import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
 import {
   getComboioSelecionado,
@@ -182,7 +183,11 @@ export function FuelFormScreen() {
       router.replace("/dashboard");
       return;
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      if (e instanceof ApiError && e.status === 404) {
+        setErro("Equipamento não encontrado. Confira a placa ou o chassi.");
+      } else {
+        setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      }
     } finally {
       setIsSaving(false);
     }
