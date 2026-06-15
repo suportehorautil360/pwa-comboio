@@ -21,6 +21,7 @@ import {
   ORIGENS_CARGA,
   type ReabastecimentoSource,
 } from "@/lib/api/reabastecimento";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
 import { submit } from "@/lib/offline/outbox";
 import {
@@ -132,29 +133,18 @@ export function ComboioRefillScreen() {
           <FormFieldLabel htmlFor="comboio" required>
             Comboio
           </FormFieldLabel>
-          <Select
+          <ComboioSelect
+            id="comboio"
+            comboios={comboios}
             value={comboioId}
-            onValueChange={trocarComboio}
+            onChange={trocarComboio}
             disabled={comboios.length === 0}
-          >
-            <SelectTrigger id="comboio" className="h-11 w-full">
-              <SelectValue
-                placeholder={
-                  comboios.length
-                    ? "Selecione o comboio"
-                    : "Nenhum comboio disponível"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {comboios.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.descricao}
-                  {c.placa ? ` · ${c.placa}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={
+              comboios.length
+                ? "Selecione o comboio"
+                : "Nenhum comboio disponível"
+            }
+          />
         </div>
 
         <div className="space-y-2">

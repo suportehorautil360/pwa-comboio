@@ -10,13 +10,7 @@ import { FieldHeader } from "@/components/mobile/field-header";
 import { FuelGauge } from "@/components/mobile/fuel-gauge";
 import { SectionHeading } from "@/components/mobile/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import {
   getUltimosLancamentos,
@@ -114,19 +108,11 @@ export function FieldHomeScreen() {
       <FieldHeader nome={nome} online={online} />
 
       {comboios.length > 1 ? (
-        <Select value={comboioId} onValueChange={trocarComboio}>
-          <SelectTrigger className="h-11 w-full">
-            <SelectValue placeholder="Selecione o comboio" />
-          </SelectTrigger>
-          <SelectContent>
-            {comboios.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.descricao}
-                {c.placa ? ` · ${c.placa}` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <ComboioSelect
+          comboios={comboios}
+          value={comboioId}
+          onChange={trocarComboio}
+        />
       ) : null}
 
       <Card className="ring-border/50">
