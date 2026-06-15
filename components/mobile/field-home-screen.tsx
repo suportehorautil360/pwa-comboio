@@ -11,6 +11,7 @@ import { FuelGauge } from "@/components/mobile/fuel-gauge";
 import { SectionHeading } from "@/components/mobile/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import {
   getUltimosLancamentos,
@@ -105,6 +106,7 @@ export function FieldHomeScreen() {
 
   return (
     <div className="mx-auto w-full max-w-lg space-y-6">
+      <FlashToast />
       <FieldHeader nome={nome} online={online} />
 
       {comboios.length > 1 ? (

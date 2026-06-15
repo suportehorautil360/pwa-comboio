@@ -31,6 +31,7 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
 import { submit } from "@/lib/offline/outbox";
+import { setFlash } from "@/lib/flash";
 import {
   getComboioSelecionado,
   getSessionUser,
@@ -159,7 +160,7 @@ export function FuelFormScreen() {
     setIsSaving(true);
     try {
       const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
-      await submit("abastecimento", {
+      const { synced } = await submit("abastecimento", {
         prefeituraId: pid,
         comboioId: comboioId || undefined,
         funcionarioId: user?.funcionarioId,
@@ -173,6 +174,11 @@ export function FuelFormScreen() {
         longitude: coords?.lng ?? 0,
       });
       // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      setFlash(
+        synced
+          ? "Abastecimento registrado"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
       router.replace("/dashboard");
       return;
     } catch (e) {

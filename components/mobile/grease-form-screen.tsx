@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
 import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
 import { submit } from "@/lib/offline/outbox";
+import { setFlash } from "@/lib/flash";
 import { getSessionUser } from "@/lib/session";
 
 export function GreaseFormScreen() {
@@ -117,15 +118,14 @@ export function GreaseFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      setSucesso(
+      // Volta pro início (mesmo padrão de abastecer/reabastecer).
+      setFlash(
         synced
-          ? "Engraxe registrado!"
-          : "Sem sinal agora — salvo no aparelho, sincroniza sozinho.",
+          ? "Engraxe registrado"
+          : "Salvo no aparelho — sincroniza sozinho",
       );
-      setEquipment("");
-      setReading("");
-      setPontos([]);
-      setObservation("");
+      router.replace("/dashboard");
+      return;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {

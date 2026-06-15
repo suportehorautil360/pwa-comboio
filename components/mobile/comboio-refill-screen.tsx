@@ -24,6 +24,7 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
 import { submit } from "@/lib/offline/outbox";
+import { setFlash } from "@/lib/flash";
 import {
   getComboioSelecionado,
   getSessionUser,
@@ -100,7 +101,7 @@ export function ComboioRefillScreen() {
 
     setIsSaving(true);
     try {
-      await submit("reabastecimento", {
+      const { synced } = await submit("reabastecimento", {
         prefeituraId: user.prefeituraId,
         comboioId,
         funcionarioId: user.funcionarioId,
@@ -109,6 +110,11 @@ export function ComboioRefillScreen() {
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
       // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      setFlash(
+        synced
+          ? "Carga registrada no comboio"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
       router.replace("/dashboard");
       return;
     } catch (e) {
