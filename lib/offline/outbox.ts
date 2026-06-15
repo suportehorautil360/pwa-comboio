@@ -18,8 +18,19 @@ export interface OutboxItem {
   payload: unknown;
   createdAt: number;
   attempts: number;
+  /**
+   * Chave de idempotência enviada no header `Idempotency-Key`. Estável entre
+   * reenvios — o backend descarta a duplicata e devolve a resposta gravada.
+   * Opcional para tolerar itens enfileirados antes desta versão.
+   */
+  idempotencyKey?: string;
   /** true quando o servidor rejeitou (4xx) — não adianta reenviar sozinho. */
   failed?: boolean;
+}
+
+/** Resultado de {@link submit}: se sincronizou na hora ou ficou na fila. */
+export interface SubmitResult {
+  synced: boolean;
 }
 
 export interface OutboxCounts {
@@ -103,6 +114,7 @@ function notify(): void {
 export async function enqueue(
   kind: OutboxKind,
   payload: unknown,
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<void> {
   const item: OutboxItem = {
     id: crypto.randomUUID(),
@@ -110,9 +122,50 @@ export async function enqueue(
     payload,
     createdAt: Date.now(),
     attempts: 0,
+    idempotencyKey,
   };
   await run("readwrite", (s) => s.add(item));
   notify();
+}
+
+/**
+ * Registra um lançamento de frota: tenta enviar direto quando há sinal e só
+ * cai no outbox se faltar conexão ou o servidor estiver fora. Idempotente — a
+ * mesma chave acompanha o registro no envio direto e nos reenvios da fila, então
+ * nunca duplica. Use no lugar de `enqueue + flushOutbox` quando a tela precisa
+ * saber se sincronizou agora (mensagem precisa, não "salvo quando der sinal").
+ *
+ * - online + 2xx → `{ synced: true }` (nada vai para a fila)
+ * - 4xx (validação/sessão/saldo) → lança `ApiError` (a tela mostra o erro)
+ * - 409 "processando" (idempotência transitória), 5xx, rede ou offline →
+ *   enfileira e devolve `{ synced: false }` (sincroniza sozinho depois)
+ */
+export async function submit(
+  kind: OutboxKind,
+  payload: unknown,
+): Promise<SubmitResult> {
+  const idempotencyKey = crypto.randomUUID();
+  const online = typeof navigator === "undefined" || navigator.onLine;
+
+  if (online) {
+    try {
+      await api.post(PATHS[kind], payload, { idempotencyKey });
+      return { synced: true };
+    } catch (e) {
+      const definitivo =
+        e instanceof ApiError &&
+        e.status >= 400 &&
+        e.status < 500 &&
+        e.status !== 409;
+      // Rejeição definitiva (ex.: saldo insuficiente, sessão): não enfileira —
+      // reenviar daria o mesmo erro. A tela mostra a mensagem.
+      if (definitivo) throw e;
+      // 409 transitório, 5xx ou falha de rede: salva offline e segue.
+    }
+  }
+
+  await enqueue(kind, payload, idempotencyKey);
+  return { synced: false };
 }
 
 export async function getCounts(): Promise<OutboxCounts> {
@@ -195,7 +248,9 @@ export async function flushOutbox(): Promise<void> {
     const pendentes = (await listAll()).filter((i) => !i.failed);
     for (const item of pendentes) {
       try {
-        await api.post(PATHS[item.kind], item.payload);
+        await api.post(PATHS[item.kind], item.payload, {
+          idempotencyKey: item.idempotencyKey,
+        });
         await run("readwrite", (s) => s.delete(item.id));
         notify();
       } catch (e) {

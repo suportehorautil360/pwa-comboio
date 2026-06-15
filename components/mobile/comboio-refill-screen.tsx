@@ -21,12 +21,19 @@ import {
   ORIGENS_CARGA,
   type ReabastecimentoSource,
 } from "@/lib/api/reabastecimento";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
-import { getSessionUser } from "@/lib/session";
+import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
+import { submit } from "@/lib/offline/outbox";
+import {
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+} from "@/lib/session";
 
 export function ComboioRefillScreen() {
   const router = useRouter();
   const [nome, setNome] = useState("");
+  const [comboios, setComboios] = useState<ComboioItem[]>([]);
+  const [comboioId, setComboioId] = useState("");
   const [source, setSource] = useState<ReabastecimentoSource>("gasStation");
   const [liters, setLiters] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -36,14 +43,38 @@ export function ComboioRefillScreen() {
 
   useEffect(() => {
     const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    if (!user?.prefeituraId || !user.funcionarioId) {
       router.push("/");
       return;
     }
+    const pid = user.prefeituraId;
+    const fid = user.funcionarioId;
+    let ativo = true;
     void (async () => {
-      setNome(user.nome);
+      if (ativo) setNome(user.nome);
+      try {
+        const lista = await listarComboiosDoMotorista(pid, fid);
+        if (!ativo) return;
+        setComboios(lista);
+        const salvo = getComboioSelecionado();
+        setComboioId(
+          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
+            lista[0]?.id ||
+            "",
+        );
+      } catch {
+        if (ativo) setComboios([]);
+      }
     })();
+    return () => {
+      ativo = false;
+    };
   }, [router]);
+
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,6 +82,10 @@ export function ComboioRefillScreen() {
     setSucesso("");
 
     const litrosNum = Number(liters);
+    if (!comboioId) {
+      setErro("Selecione o comboio que está reabastecendo.");
+      return;
+    }
     if (!(litrosNum > 0)) {
       setErro("Informe os litros recebidos.");
       return;
@@ -64,14 +99,19 @@ export function ComboioRefillScreen() {
 
     setIsSaving(true);
     try {
-      await enqueue("reabastecimento", {
+      const { synced } = await submit("reabastecimento", {
         prefeituraId: user.prefeituraId,
+        comboioId,
+        funcionarioId: user.funcionarioId,
         sourceType: source,
         receivedLiters: litrosNum,
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
+      setSucesso(
+        synced
+          ? "Carga registrada no comboio!"
+          : "Sem sinal agora — salvo no aparelho, sincroniza sozinho.",
+      );
       setLiters("");
       setInvoiceNumber("");
     } catch (e) {
@@ -88,6 +128,35 @@ export function ComboioRefillScreen() {
       <PageBackHeader eyebrow="Lançamento" title="Reabastecer comboio" />
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-2">
+          <FormFieldLabel htmlFor="comboio" required>
+            Comboio
+          </FormFieldLabel>
+          <Select
+            value={comboioId}
+            onValueChange={trocarComboio}
+            disabled={comboios.length === 0}
+          >
+            <SelectTrigger id="comboio" className="h-11 w-full">
+              <SelectValue
+                placeholder={
+                  comboios.length
+                    ? "Selecione o comboio"
+                    : "Nenhum comboio disponível"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {comboios.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.descricao}
+                  {c.placa ? ` · ${c.placa}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="space-y-2">
           <FormFieldLabel htmlFor="source" required>
             Origem da carga
@@ -162,7 +231,7 @@ export function ComboioRefillScreen() {
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>

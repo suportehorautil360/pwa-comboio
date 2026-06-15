@@ -18,10 +18,16 @@ export class ApiError extends Error {
   }
 }
 
+/** Opções por requisição (ex.: chave de idempotência para escritas do outbox). */
+export interface RequestOptions {
+  idempotencyKey?: string;
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  opts?: RequestOptions,
 ): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -29,6 +35,9 @@ async function request<T>(
     headers: {
       ...(body != null ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts?.idempotencyKey
+        ? { "Idempotency-Key": opts.idempotencyKey }
+        : {}),
     },
     body: body != null ? JSON.stringify(body) : undefined,
   });
@@ -54,7 +63,8 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>("POST", path, body, opts),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   del: <T>(path: string) => request<T>("DELETE", path),
 };

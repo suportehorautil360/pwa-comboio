@@ -15,6 +15,7 @@ export interface SessionUser {
 
 const TOKEN_KEY = "hu360_token";
 const USER_KEY = "hu360_user";
+const COMBOIO_KEY = "hu360_comboio";
 
 export function saveSession(token: string, user: SessionUser): void {
   if (typeof window === "undefined") return;
@@ -50,6 +51,26 @@ export function clearSession(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(COMBOIO_KEY);
+  } catch {
+    /* ignora */
+  }
+}
+
+/** Comboio selecionado pelo comboista no turno atual (persistido entre telas). */
+export function getComboioSelecionado(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(COMBOIO_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setComboioSelecionado(comboioId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(COMBOIO_KEY, comboioId);
   } catch {
     /* ignora */
   }

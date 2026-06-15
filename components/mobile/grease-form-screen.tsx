@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
 import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
+import { submit } from "@/lib/offline/outbox";
 import { getSessionUser } from "@/lib/session";
 
 export function GreaseFormScreen() {
@@ -105,10 +105,11 @@ export function GreaseFormScreen() {
 
     setIsSaving(true);
     try {
-      await enqueue("lubrificacao", {
+      const { synced } = await submit("lubrificacao", {
         prefeituraId: user.prefeituraId,
         plateOrChassis: equipment.trim().toUpperCase(),
         comboistaNome: user.nome,
+        funcionarioId: user.funcionarioId,
         reading: leituraNum,
         readingUnit,
         greasedPoints: pontos,
@@ -116,8 +117,11 @@ export function GreaseFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
+      setSucesso(
+        synced
+          ? "Engraxe registrado!"
+          : "Sem sinal agora — salvo no aparelho, sincroniza sozinho.",
+      );
       setEquipment("");
       setReading("");
       setPontos([]);
@@ -267,7 +271,7 @@ export function GreaseFormScreen() {
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>
