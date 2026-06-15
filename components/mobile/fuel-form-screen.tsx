@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Wifi } from "lucide-react";
+import { MapPin, TriangleAlert, Wifi } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { FormFieldLabel } from "@/components/mobile/form-field-label";
@@ -13,8 +13,8 @@ import {
 } from "@/components/mobile/measurement-toggle";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,8 +28,15 @@ import {
   type EquipamentoApi,
   type PostoApi,
 } from "@/lib/api/abastecimento";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
-import { getSessionUser } from "@/lib/session";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
+import { submit } from "@/lib/offline/outbox";
+import { setFlash } from "@/lib/flash";
+import {
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+} from "@/lib/session";
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -44,7 +51,9 @@ export function FuelFormScreen() {
   const router = useRouter();
   const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
   const [postos, setPostos] = useState<PostoApi[]>([]);
+  const [comboios, setComboios] = useState<ComboioItem[]>([]);
 
+  const [comboioId, setComboioId] = useState("");
   const [equipment, setEquipment] = useState("");
   const [liters, setLiters] = useState("");
   const [measurement, setMeasurement] = useState<MeasurementType>("horimetro");
@@ -63,9 +72,19 @@ export function FuelFormScreen() {
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
+  // Saldo conhecido do comboio selecionado (cache) — para o aviso antecipado.
+  const comboioSel = comboios.find((c) => c.id === comboioId);
+  const saldoCache = comboioSel?.tank.currentVolume ?? null;
+  const litrosNum = Number(liters);
+  const semSaldo =
+    !postoId &&
+    saldoCache !== null &&
+    litrosNum > 0 &&
+    litrosNum > saldoCache;
+
   useEffect(() => {
     const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    if (!user?.prefeituraId || !user.funcionarioId) {
       router.push("/");
       return;
     }
@@ -76,6 +95,17 @@ export function FuelFormScreen() {
     void listarPostos(pid)
       .then(setPostos)
       .catch(() => setPostos([]));
+    void listarComboiosDoMotorista(pid, user.funcionarioId)
+      .then((lista) => {
+        setComboios(lista);
+        const salvo = getComboioSelecionado();
+        setComboioId(
+          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
+            lista[0]?.id ||
+            "",
+        );
+      })
+      .catch(() => setComboios([]));
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));
@@ -91,12 +121,16 @@ export function FuelFormScreen() {
     );
   }, [router]);
 
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErro("");
     setSucesso("");
 
-    const litrosNum = Number(liters);
     const leituraNum = Number(reading);
     if (!equipment.trim()) {
       setErro("Informe a placa ou chassi do equipamento.");
@@ -111,17 +145,25 @@ export function FuelFormScreen() {
       return;
     }
 
-    const pid = getSessionUser()?.prefeituraId ?? "";
+    const user = getSessionUser();
+    const pid = user?.prefeituraId ?? "";
     if (!pid) {
       setErro("Sessão expirada. Faça login novamente.");
+      return;
+    }
+    // Sem posto, o combustível sai do comboio: precisa saber qual.
+    if (!postoId && !comboioId) {
+      setErro("Selecione o comboio de onde sai o combustível.");
       return;
     }
 
     setIsSaving(true);
     try {
       const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
-      await enqueue("abastecimento", {
+      const { synced } = await submit("abastecimento", {
         prefeituraId: pid,
+        comboioId: comboioId || undefined,
+        funcionarioId: user?.funcionarioId,
         plateOrChassis: equipment.trim().toUpperCase(),
         liters: litrosNum,
         measurementType: measurement,
@@ -131,13 +173,14 @@ export function FuelFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
-      setEquipment("");
-      setLiters("");
-      setReading("");
-      setPostoId("");
-      setPhotoFile(null);
+      // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      setFlash(
+        synced
+          ? "Abastecimento registrado"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
+      router.replace("/dashboard");
+      return;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -153,30 +196,33 @@ export function FuelFormScreen() {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
+          <FormFieldLabel htmlFor="comboio" required>
+            Comboio (origem do combustível)
+          </FormFieldLabel>
+          <ComboioSelect
+            id="comboio"
+            comboios={comboios}
+            value={comboioId}
+            onChange={trocarComboio}
+            disabled={comboios.length === 0}
+            placeholder={
+              comboios.length
+                ? "Selecione o comboio"
+                : "Nenhum comboio disponível"
+            }
+          />
+        </div>
+
+        <div className="space-y-2">
           <FormFieldLabel htmlFor="equipment" required>
             Placa ou chassi do equipamento
           </FormFieldLabel>
-          <Input
+          <EquipamentoAutocomplete
             id="equipment"
-            name="equipment"
-            list="equip-list"
-            placeholder="Ex: ABC-1234"
-            className="h-11 uppercase md:text-base"
+            equipamentos={equipamentos}
             value={equipment}
-            onChange={(e) => setEquipment(e.target.value)}
-            required
+            onChange={setEquipment}
           />
-          <datalist id="equip-list">
-            {equipamentos.map((eq) => {
-              const valor = eq.placa || eq.chassis || "";
-              if (!valor) return null;
-              return (
-                <option key={eq.id} value={valor}>
-                  {eq.descricao ?? eq.modelo ?? valor}
-                </option>
-              );
-            })}
-          </datalist>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {equipamentos.length > 0
               ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`
@@ -201,6 +247,13 @@ export function FuelFormScreen() {
             onChange={(e) => setLiters(e.target.value)}
             required
           />
+          {semSaldo ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Acima do saldo do comboio ({saldoCache?.toLocaleString("pt-BR")} L).
+              O lançamento pode ser recusado.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -289,7 +342,7 @@ export function FuelFormScreen() {
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>

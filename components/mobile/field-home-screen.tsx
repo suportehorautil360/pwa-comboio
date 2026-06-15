@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownToLine, Fuel, Sun } from "lucide-react";
 
@@ -10,15 +10,21 @@ import { FieldHeader } from "@/components/mobile/field-header";
 import { FuelGauge } from "@/components/mobile/fuel-gauge";
 import { SectionHeading } from "@/components/mobile/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import {
-  getTanqueComboio,
   getUltimosLancamentos,
   type LancamentoItem,
   type TanqueComboio,
 } from "@/lib/api/dashboard";
+import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
 import { useOutboxItems } from "@/lib/offline/use-outbox";
-import { getSessionUser } from "@/lib/session";
+import {
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+} from "@/lib/session";
 
 function labelComboio(t: TanqueComboio): string {
   const partes = [
@@ -33,31 +39,44 @@ function labelComboio(t: TanqueComboio): string {
 export function FieldHomeScreen() {
   const router = useRouter();
   const [nome, setNome] = useState("");
-  const [tank, setTank] = useState<TanqueComboio | null>(null);
+  const [comboios, setComboios] = useState<ComboioItem[]>([]);
+  const [comboioId, setComboioId] = useState("");
   const [lancamentos, setLancamentos] = useState<LancamentoItem[]>([]);
   const [online, setOnline] = useState(true);
   const [loading, setLoading] = useState(true);
   const pendentes = useOutboxItems();
 
+  const comboioSel = useMemo(
+    () => comboios.find((c) => c.id === comboioId) ?? null,
+    [comboios, comboioId],
+  );
+  const tank = comboioSel?.tank ?? null;
+
   useEffect(() => {
     const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    if (!user?.prefeituraId || !user.funcionarioId) {
       router.push("/");
       return;
     }
     const pid = user.prefeituraId;
+    const fid = user.funcionarioId;
     let ativo = true;
     void (async () => {
       if (ativo) setNome(user.nome);
       try {
-        const [t, l] = await Promise.all([
-          getTanqueComboio(pid),
+        const [lista, l] = await Promise.all([
+          listarComboiosDoMotorista(pid, fid),
           getUltimosLancamentos(pid),
         ]);
-        if (ativo) {
-          setTank(t);
-          setLancamentos(l);
-        }
+        if (!ativo) return;
+        setComboios(lista);
+        const salvo = getComboioSelecionado();
+        setComboioId(
+          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
+            lista[0]?.id ||
+            "",
+        );
+        setLancamentos(l);
       } catch {
         /* mantém vazio em caso de erro */
       } finally {
@@ -80,9 +99,23 @@ export function FieldHomeScreen() {
     };
   }, []);
 
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
+
   return (
     <div className="mx-auto w-full max-w-lg space-y-6">
+      <FlashToast />
       <FieldHeader nome={nome} online={online} />
+
+      {comboios.length > 1 ? (
+        <ComboioSelect
+          comboios={comboios}
+          value={comboioId}
+          onChange={trocarComboio}
+        />
+      ) : null}
 
       <Card className="ring-border/50">
         <CardContent className="space-y-4 pt-0">
@@ -91,7 +124,11 @@ export function FieldHomeScreen() {
               TANQUE DO COMBOIO
             </p>
             <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {tank ? labelComboio(tank) : loading ? "Carregando…" : "Sem tanque cadastrado"}
+              {tank
+                ? labelComboio(tank)
+                : loading
+                  ? "Carregando…"
+                  : "Nenhum comboio disponível"}
             </p>
           </div>
 

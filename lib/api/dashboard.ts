@@ -26,12 +26,14 @@ export interface LancamentoItem {
   time: string;
 }
 
-/** Tanque do comboio da prefeitura (pega o primeiro/ativo). */
+/** Tanque de um comboio específico (GET /tanks/by-comboio/:comboioId). */
 export async function getTanqueComboio(
-  prefeituraId: string,
+  comboioId: string,
 ): Promise<TanqueComboio | null> {
-  const r = await api.get<{ data: TanqueComboio[] }>(`/tanks/${prefeituraId}`);
-  return r.data?.[0] ?? null;
+  const r = await api.get<{ data: TanqueComboio | null }>(
+    `/tanks/by-comboio/${comboioId}`,
+  );
+  return r.data ?? null;
 }
 
 export interface HistoricoSummary {

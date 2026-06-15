@@ -11,6 +11,7 @@ import { featureFlagsApi } from "@/lib/api/feature-flags";
 import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { useOutbox } from "@/lib/offline/use-outbox";
 import { marcarBatidaHoje } from "@/lib/ponto/ponto-dia";
+import { setFlash } from "@/lib/flash";
 import { clearSession, getSessionUser, type SessionUser } from "@/lib/session";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -118,6 +119,12 @@ export function PontoScreen() {
       });
       marcarBatidaHoje(user);
       void flushOutbox();
+      const online = typeof navigator === "undefined" || navigator.onLine;
+      setFlash(
+        online
+          ? "Ponto registrado"
+          : "Ponto salvo no aparelho — sincroniza sozinho",
+      );
       router.replace("/dashboard");
     } catch {
       setErro("Não foi possível registrar o ponto. Tente de novo.");
