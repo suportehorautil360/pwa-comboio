@@ -3,7 +3,23 @@
  * Base configurável por NEXT_PUBLIC_API_URL; default = backend local.
  * Anexa o Bearer token da sessão automaticamente.
  */
-import { getToken } from "../session";
+import { clearSession, getToken } from "../session";
+
+/**
+ * Sessão inválida/expirada (401) ou sem acesso àquela empresa (403): limpa a
+ * sessão e volta pro login. Centralizado aqui — qualquer chamada que falhe a
+ * autenticação derruba a sessão (ex.: token antigo sem funcionarioId após o
+ * guard de isolamento entrar). Ignora o próprio endpoint de login.
+ */
+function tratarSessaoInvalida(status: number, path: string): void {
+  if (status !== 401 && status !== 403) return;
+  if (path.includes("/auth/login")) return;
+  if (typeof window === "undefined") return;
+  clearSession();
+  if (window.location.pathname !== "/") {
+    window.location.replace("/");
+  }
+}
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
@@ -43,6 +59,7 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    tratarSessaoInvalida(res.status, path);
     let message = `Erro ${res.status}`;
     try {
       const data = (await res.json()) as { message?: string | string[] };
