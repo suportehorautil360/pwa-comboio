@@ -13,8 +13,8 @@ import {
 } from "@/components/mobile/measurement-toggle";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -217,27 +217,12 @@ export function FuelFormScreen() {
           <FormFieldLabel htmlFor="equipment" required>
             Placa ou chassi do equipamento
           </FormFieldLabel>
-          <Input
+          <EquipamentoAutocomplete
             id="equipment"
-            name="equipment"
-            list="equip-list"
-            placeholder="Ex: ABC-1234"
-            className="h-11 uppercase md:text-base"
+            equipamentos={equipamentos}
             value={equipment}
-            onChange={(e) => setEquipment(e.target.value)}
-            required
+            onChange={setEquipment}
           />
-          <datalist id="equip-list">
-            {equipamentos.map((eq) => {
-              const valor = eq.placa || eq.chassis || "";
-              if (!valor) return null;
-              return (
-                <option key={eq.id} value={valor}>
-                  {eq.descricao ?? eq.modelo ?? valor}
-                </option>
-              );
-            })}
-          </datalist>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {equipamentos.length > 0
               ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`

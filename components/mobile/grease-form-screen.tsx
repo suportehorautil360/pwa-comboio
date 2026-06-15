@@ -12,6 +12,7 @@ import {
   type MeasurementType,
 } from "@/components/mobile/measurement-toggle";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
+import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
@@ -144,27 +145,12 @@ export function GreaseFormScreen() {
           <FormFieldLabel htmlFor="equipment" required>
             Placa ou chassi do equipamento
           </FormFieldLabel>
-          <Input
+          <EquipamentoAutocomplete
             id="equipment"
-            name="equipment"
-            list="equip-list"
-            placeholder="Ex: ABC-1234"
-            className="h-11 uppercase md:text-base"
+            equipamentos={equipamentos}
             value={equipment}
-            onChange={(e) => setEquipment(e.target.value)}
-            required
+            onChange={setEquipment}
           />
-          <datalist id="equip-list">
-            {equipamentos.map((eq) => {
-              const valor = eq.placa || eq.chassis || "";
-              if (!valor) return null;
-              return (
-                <option key={eq.id} value={valor}>
-                  {eq.descricao ?? eq.modelo ?? valor}
-                </option>
-              );
-            })}
-          </datalist>
         </div>
 
         <div className="space-y-2">
