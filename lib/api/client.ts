@@ -3,7 +3,7 @@
  * Base configurável por NEXT_PUBLIC_API_URL; default = backend local.
  * Anexa o Bearer token da sessão automaticamente.
  */
-import { clearSession, getToken } from "../session";
+import { clearSession, getToken, touchSession } from "../session";
 
 /**
  * Sessão inválida/expirada (401) ou sem acesso àquela empresa (403): limpa a
@@ -73,6 +73,9 @@ async function request<T>(
     }
     throw new ApiError(res.status, message);
   }
+
+  // Contato bem-sucedido com o back: desliza a janela de confiança offline.
+  touchSession();
 
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

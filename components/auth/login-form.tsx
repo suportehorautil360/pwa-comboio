@@ -21,8 +21,8 @@ export function LoginForm() {
     setErro("");
     setIsLoading(true);
     try {
-      const { token, user } = await login(usuario.trim(), senha);
-      saveSession(token, user);
+      const { token, user, expiresIn } = await login(usuario.trim(), senha);
+      saveSession(token, user, expiresIn);
       router.push("/dashboard");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível entrar.");

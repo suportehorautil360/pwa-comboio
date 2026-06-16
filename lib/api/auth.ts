@@ -25,7 +25,7 @@ interface LoginResponse {
 export async function login(
   identificador: string,
   senha: string,
-): Promise<{ token: string; user: SessionUser }> {
+): Promise<{ token: string; user: SessionUser; expiresIn?: string }> {
   const r = await api.post<LoginResponse>("/funcionarios/auth/login", {
     identificador,
     senha,
@@ -36,6 +36,7 @@ export async function login(
   const f = r.funcionario;
   return {
     token: r.accessToken,
+    expiresIn: r.expiresIn,
     user: {
       nome: f.nome,
       usuario: f.loginGerado || f.cpf,
