@@ -30,6 +30,7 @@ import {
   solicitacoesPontoApi,
   type SolicitacaoPonto,
 } from "../api/solicitacoes-ponto";
+import { cacheKeys } from "./cache-keys";
 import { useCached, type CachedResult } from "./use-cached";
 
 const MIN = 60_000;
@@ -42,9 +43,7 @@ export function useComboios(
   funcionarioId?: string,
 ): CachedResult<ComboioItem[]> {
   return useCached(
-    prefeituraId && funcionarioId
-      ? `comboios:${prefeituraId}:${funcionarioId}`
-      : null,
+    cacheKeys.comboios(prefeituraId, funcionarioId),
     () => listarComboiosDoMotorista(prefeituraId!, funcionarioId!),
     { ttl: 5 * MIN },
   );
@@ -55,7 +54,7 @@ export function useEquipamentos(
   prefeituraId?: string,
 ): CachedResult<EquipamentoApi[]> {
   return useCached(
-    prefeituraId ? `equipamentos:${prefeituraId}` : null,
+    cacheKeys.equipamentos(prefeituraId),
     () => listarEquipamentos(prefeituraId!),
     { ttl: DIA },
   );
@@ -64,7 +63,7 @@ export function useEquipamentos(
 /** Postos da prefeitura. */
 export function usePostos(prefeituraId?: string): CachedResult<PostoApi[]> {
   return useCached(
-    prefeituraId ? `postos:${prefeituraId}` : null,
+    cacheKeys.postos(prefeituraId),
     () => listarPostos(prefeituraId!),
     { ttl: DIA },
   );
@@ -76,7 +75,7 @@ export function useUltimosLancamentos(
   limite = 6,
 ): CachedResult<LancamentoItem[]> {
   return useCached(
-    prefeituraId ? `ultimos:${prefeituraId}:${limite}` : null,
+    cacheKeys.ultimos(prefeituraId, limite),
     () => getUltimosLancamentos(prefeituraId!, limite),
     { ttl: 2 * MIN },
   );
@@ -87,7 +86,7 @@ export function useHistorico(
   prefeituraId?: string,
 ): CachedResult<HistoricoData> {
   return useCached(
-    prefeituraId ? `historico:${prefeituraId}` : null,
+    cacheKeys.historico(prefeituraId),
     () => getHistorico(prefeituraId!),
     { ttl: 2 * MIN },
   );
@@ -98,7 +97,7 @@ export function useTimeRecords(
   prefeituraId?: string,
 ): CachedResult<PontoRegistro[]> {
   return useCached(
-    prefeituraId ? `time-records:${prefeituraId}` : null,
+    cacheKeys.timeRecords(prefeituraId),
     () => pontoApi.listar(prefeituraId!),
     { ttl: 2 * MIN },
   );
@@ -109,7 +108,7 @@ export function useEscala(
   prefeituraId?: string,
 ): CachedResult<Escala | null> {
   return useCached(
-    prefeituraId ? `escala:${prefeituraId}` : null,
+    cacheKeys.escala(prefeituraId),
     () => escalaApi.obter(prefeituraId!),
     { ttl: DIA },
   );
@@ -118,7 +117,7 @@ export function useEscala(
 /** Abonos da prefeitura. */
 export function useAbonos(prefeituraId?: string): CachedResult<Abono[]> {
   return useCached(
-    prefeituraId ? `abonos:${prefeituraId}` : null,
+    cacheKeys.abonos(prefeituraId),
     () => abonosApi.listar(prefeituraId!),
     { ttl: 5 * MIN },
   );
@@ -129,7 +128,7 @@ export function useEmpresa(
   prefeituraId?: string,
 ): CachedResult<EmpresaConfig | null> {
   return useCached(
-    prefeituraId ? `empresa:${prefeituraId}` : null,
+    cacheKeys.empresa(prefeituraId),
     () => configuracoesApi.obterEmpresa(prefeituraId!),
     { ttl: DIA },
   );
@@ -140,7 +139,7 @@ export function useSolicitacoes(
   prefeituraId?: string,
 ): CachedResult<SolicitacaoPonto[]> {
   return useCached(
-    prefeituraId ? `solicitacoes:${prefeituraId}` : null,
+    cacheKeys.solicitacoes(prefeituraId),
     () => solicitacoesPontoApi.listar(prefeituraId!),
     { ttl: 5 * MIN },
   );

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { login } from "@/lib/api/auth";
+import { syncAll } from "@/lib/data/sync";
 import { saveSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,9 @@ export function LoginForm() {
     try {
       const { token, user, expiresIn } = await login(usuario.trim(), senha);
       saveSession(token, user, expiresIn);
+      // Pré-aquece os caches enquanto há rede (acabou de logar): todas as telas
+      // passam a funcionar offline mesmo sem terem sido visitadas antes.
+      void syncAll(user, { force: true });
       router.push("/dashboard");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível entrar.");
