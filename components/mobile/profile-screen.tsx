@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, Clock, LogOut, Truck, User } from "lucide-react";
 
 import { SyncErrors } from "@/components/mobile/sync-errors";
+import { limparCredencialOffline } from "@/lib/auth/offline-credential";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { brand } from "@/lib/design-system";
@@ -65,6 +66,7 @@ export function ProfileScreen() {
       return;
     }
     clearSession();
+    limparCredencialOffline(); // logout explícito: esquece o login offline deste aparelho
     router.push("/");
   }
 

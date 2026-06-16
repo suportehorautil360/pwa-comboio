@@ -4,8 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { login } from "@/lib/api/auth";
+import {
+  loginOffline,
+  salvarCredencialOffline,
+} from "@/lib/auth/offline-credential";
 import { syncAll } from "@/lib/data/sync";
-import { getSessionUser, saveSession } from "@/lib/session";
+import { getSessionUser, restaurarSessao, saveSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,14 +37,25 @@ export function LoginForm() {
     event.preventDefault();
     setErro("");
     setIsLoading(true);
+    const id = usuario.trim();
     try {
-      const { token, user, expiresIn } = await login(usuario.trim(), senha);
+      const { token, user, expiresIn } = await login(id, senha);
       saveSession(token, user, expiresIn);
+      // Guarda o verificador local da senha p/ login offline depois.
+      await salvarCredencialOffline(id, senha, token, user);
       // Pré-aquece os caches enquanto há rede (acabou de logar): todas as telas
       // passam a funcionar offline mesmo sem terem sido visitadas antes.
       void syncAll(user, { force: true });
       router.push("/dashboard");
     } catch (e) {
+      // Sem rede? valida a senha localmente (login offline) e restaura a sessão.
+      const offline = await loginOffline(id, senha);
+      if (offline) {
+        restaurarSessao(offline.token, offline.user, offline.validoAte);
+        void syncAll(offline.user, {});
+        router.push("/dashboard");
+        return;
+      }
       setErro(e instanceof Error ? e.message : "Não foi possível entrar.");
       setIsLoading(false);
     }

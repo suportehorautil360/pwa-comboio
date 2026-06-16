@@ -77,6 +77,26 @@ export function saveSession(
   }
 }
 
+/**
+ * Restaura a sessão a partir de um login offline (verificador local). Ancora a
+ * janela confiável ao `trustedUntil` original do login online — não estende
+ * além disso (a credencial offline já vencerá junto).
+ */
+export function restaurarSessao(
+  token: string,
+  user: SessionUser,
+  trustedUntil: number,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    setTrustedUntil(trustedUntil);
+  } catch {
+    /* ignora */
+  }
+}
+
 /** Renova a janela de confiança — chamada a cada resposta 2xx autenticada. */
 export function touchSession(): void {
   if (typeof window === "undefined") return;
