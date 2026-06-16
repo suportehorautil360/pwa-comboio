@@ -11,8 +11,10 @@
  * - API NestJS (cross-origin): não é interceptada — leitura offline fica no
  *   Dexie (camada de dados) e escrita no outbox.
  *
- * Atualização controlada: `skipWaiting: false` — o SW novo espera e só assume
- * quando o app manda `SKIP_WAITING` (prompt de atualização).
+ * Atualização AUTOMÁTICA: `skipWaiting: true` + `clientsClaim: true` — o SW novo
+ * assume assim que instala, e a página recarrega no `controllerchange` (ver
+ * service-worker-register). Evita que o usuário fique preso num SW antigo/quebrado
+ * (que no iOS standalone faz a navegação "escapar" pro Safari).
  *
  * Background Sync: ao `sync` (rede de volta, app em 2º plano), pede às telas
  * abertas para esvaziar a outbox — token e Dexie vivem na página.
@@ -32,7 +34,7 @@ declare const self: ServiceWorkerGlobalScope;
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: false,
+  skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: defaultCache,
@@ -44,13 +46,6 @@ const serwist = new Serwist({
       },
     ],
   },
-});
-
-// O app pede para o SW novo assumir quando o usuário aceita atualizar.
-self.addEventListener("message", (event) => {
-  if ((event as ExtendableMessageEvent).data?.type === "SKIP_WAITING") {
-    void self.skipWaiting();
-  }
 });
 
 // Background Sync: a fila é esvaziada na página (token + Dexie + api client).

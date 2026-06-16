@@ -37,7 +37,7 @@ app-shell + assets do Next (Serwist) para garantir o boot offline.
 
 | Fase | Estado | Onde |
 |---|---|---|
-| **0 — Fundação** (Dexie + boot offline) | ✅ feito | [lib/db.ts](../lib/db.ts), [app/sw.ts](../app/sw.ts) (Serwist), [app/~offline](../app/~offline/page.tsx), prompt de update em [service-worker-register.tsx](../components/pwa/service-worker-register.tsx) |
+| **0 — Fundação** (Dexie + boot offline) | ✅ feito | [lib/db.ts](../lib/db.ts), [app/sw.ts](../app/sw.ts) (Serwist, **auto-update** `skipWaiting:true` + reload no `controllerchange`), [app/~offline](../app/~offline/page.tsx), boundaries [app/error.tsx](../app/error.tsx)/[app/global-error.tsx](../app/global-error.tsx) (recupera falha de chunk in-app, não escapa pro Safari no iOS) |
 | **1 — Outbox robusto** | ✅ feito | [lib/offline/outbox.ts](../lib/offline/outbox.ts) (backoff + dead-letter), edições de ponto pelo outbox, UI de erros em [sync-errors.tsx](../components/mobile/sync-errors.tsx), Background Sync |
 | **2 — Leituras offline** | ✅ feito | [lib/data/](../lib/data/) (cache read-through + `useCached` + `queries.ts`); 8 telas migradas |
 | **3 — Login/sessão offline** | ✅ feito | [lib/session.ts](../lib/session.ts): janela confiável 7d, `touchSession` (deslizante), expiração no `getSessionUser` |
