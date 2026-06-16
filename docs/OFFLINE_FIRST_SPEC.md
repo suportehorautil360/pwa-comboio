@@ -31,6 +31,31 @@ app-shell + assets do Next (Serwist) para garantir o boot offline.
 
 ---
 
+## Status de implementação (atualizado 2026-06-16)
+
+> Implementado nos commits `feat(offline)`/`feat(pwa)` na branch `fix/historico-endpoint`.
+
+| Fase | Estado | Onde |
+|---|---|---|
+| **0 — Fundação** (Dexie + boot offline) | ✅ feito | [lib/db.ts](../lib/db.ts), [app/sw.ts](../app/sw.ts) (Serwist), [app/~offline](../app/~offline/page.tsx), prompt de update em [service-worker-register.tsx](../components/pwa/service-worker-register.tsx) |
+| **1 — Outbox robusto** | ✅ feito | [lib/offline/outbox.ts](../lib/offline/outbox.ts) (backoff + dead-letter), edições de ponto pelo outbox, UI de erros em [sync-errors.tsx](../components/mobile/sync-errors.tsx), Background Sync |
+| **2 — Leituras offline** | ✅ feito | [lib/data/](../lib/data/) (cache read-through + `useCached` + `queries.ts`); 8 telas migradas |
+| **3 — Login/sessão offline** | ✅ feito | [lib/session.ts](../lib/session.ts): janela confiável 7d, `touchSession` (deslizante), expiração no `getSessionUser` |
+| **4 — PWA production-ready** | ✅ parcial | ícones 192/512/maskable ([app/icon.tsx](../app/icon.tsx)), manifest com id/scope/lang/categories. Falta: splash iOS, push (opcional) |
+| **5 — Sync incremental** | ⛔ bloqueado no back | tabela `meta` (cursores) pronta; precisa do contrato abaixo |
+
+**Verificado:** `pnpm lint` + `pnpm test` (60 testes) + `pnpm build` (Serwist gera o SW). **Não** rodado: teste offline real em device (instalar → derrubar rede → recarregar) — ver checklist §10.
+
+**Contrato pendente no `back-360-` para a Fase 5 (sync incremental):**
+- GETs de lista aceitarem `?updatedSince=<ISO>` e devolverem só o delta.
+- Cada registro com `updatedAt` (ISO) e, idealmente, `rev`/versão.
+- `Idempotency-Key` também nas escritas migradas (`/time-records/update/:id`, `/solicitacoes-ponto`).
+- Endpoint de refresh de token (`/funcionarios/auth/refresh`) para renovar o JWT sem novo login (hoje a janela confiável de 7d cobre o offline).
+
+Enquanto isso, o pull faz **full-replace por entidade** (idempotente, correto; só mais pesado em 3G).
+
+---
+
 ## 1. Diagnóstico do estado atual
 
 ### 1.1. O que JÁ existe e funciona
