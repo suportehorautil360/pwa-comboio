@@ -46,11 +46,13 @@ app-shell + assets do Next (Serwist) para garantir o boot offline.
 
 **Verificado:** `pnpm lint` + `pnpm test` (65 testes) + `pnpm build` (Serwist gera o SW). **Não** rodado: teste offline real em device (instalar → derrubar rede → recarregar) — ver checklist §10.
 
-**Contrato pendente no `back-360-` para a Fase 5 (sync incremental):**
-- GETs de lista aceitarem `?updatedSince=<ISO>` e devolverem só o delta.
-- Cada registro com `updatedAt` (ISO) e, idealmente, `rev`/versão.
-- `Idempotency-Key` também nas escritas migradas (`/time-records/update/:id`, `/solicitacoes-ponto`).
-- Endpoint de refresh de token (`/funcionarios/auth/refresh`) para renovar o JWT sem novo login (hoje a janela confiável de 7d cobre o offline).
+**Contrato no `back-360-`:**
+- ✅ **`Idempotency-Key` nas escritas migradas** (`/time-records/update/:id`, `/solicitacoes-ponto`) — feito no back (branch `feat/idempotencia-ponto`, commit `3cfc7a2`): o `IdempotencyInterceptor` agora cobre os dois endpoints, então o reenvio do outbox não duplica ajustes/solicitações.
+- ⏳ GETs de lista aceitarem `?updatedSince=<ISO>` e devolverem só o delta.
+- ⏳ Cada registro com `updatedAt` (ISO) e, idealmente, `rev`/versão.
+- ⏳ Endpoint de refresh de token (`/funcionarios/auth/refresh`) para renovar o JWT sem novo login (hoje a janela confiável de 7d cobre o offline).
+
+> O delta (`?updatedSince=` + `updatedAt`) é a parte grande e ainda aberta: toca 10+ módulos e exige **índices compostos no Firestore** (deploy). É um épico próprio, não um ajuste pontual.
 
 Enquanto isso, o pull faz **full-replace por entidade** (idempotente, correto; só mais pesado em 3G).
 
