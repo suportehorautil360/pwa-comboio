@@ -42,9 +42,9 @@ app-shell + assets do Next (Serwist) para garantir o boot offline.
 | **2 — Leituras offline** | ✅ feito | [lib/data/](../lib/data/) (cache read-through + `useCached` + `queries.ts`); 8 telas migradas |
 | **3 — Login/sessão offline** | ✅ feito | [lib/session.ts](../lib/session.ts): janela confiável 7d, `touchSession` (deslizante), expiração no `getSessionUser` |
 | **4 — PWA production-ready** | ✅ parcial | ícones 192/512/maskable ([app/icon.tsx](../app/icon.tsx)), manifest com id/scope/lang/categories. Falta: splash iOS, push (opcional) |
-| **5 — Sync incremental** | ⛔ bloqueado no back | tabela `meta` (cursores) pronta; precisa do contrato abaixo |
+| **5 — Sync inteligente** | ✅ parcial | **orquestrador** ([lib/data/sync.ts](../lib/data/sync.ts)): pré-aquece no login, revalida tudo ao reconectar/focar/intervalo + flush da outbox, throttle por TTL, [SyncManager](../components/pwa/sync-manager.tsx) no layout. **Falta (bloqueado no back):** só o *delta* por `?updatedSince=` |
 
-**Verificado:** `pnpm lint` + `pnpm test` (60 testes) + `pnpm build` (Serwist gera o SW). **Não** rodado: teste offline real em device (instalar → derrubar rede → recarregar) — ver checklist §10.
+**Verificado:** `pnpm lint` + `pnpm test` (65 testes) + `pnpm build` (Serwist gera o SW). **Não** rodado: teste offline real em device (instalar → derrubar rede → recarregar) — ver checklist §10.
 
 **Contrato pendente no `back-360-` para a Fase 5 (sync incremental):**
 - GETs de lista aceitarem `?updatedSince=<ISO>` e devolverem só o delta.
