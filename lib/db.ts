@@ -48,6 +48,17 @@ export interface MetaRow {
 }
 
 /**
+ * Cache de leitura (read-through). Uma linha por consulta, chave namespaced
+ * (ex.: `equipamentos:<pref>`, `time-records:<pref>`). `data` é a resposta já
+ * normalizada do NestJS; `cachedAt` alimenta o TTL/stale-while-revalidate.
+ */
+export interface CacheRow {
+  key: string;
+  data: unknown;
+  cachedAt: number;
+}
+
+/**
  * Paths estáticos por kind. `editar-ponto` é `null` porque o endpoint carrega o
  * id da batida (`/time-records/update/:id`) — o path é resolvido no enqueue.
  */
@@ -95,6 +106,7 @@ export function legacyToEvent(it: LegacyOutboxItem): OutboxItem {
 class HU360Db extends Dexie {
   outbox!: Table<OutboxItem, string>;
   meta!: Table<MetaRow, string>;
+  cache!: Table<CacheRow, string>;
 
   constructor() {
     super("hu360-comboio");
@@ -112,6 +124,8 @@ class HU360Db extends Dexie {
           itens.map((it) => tx.table("outbox").put(legacyToEvent(it))),
         );
       });
+    // v3 — cache de leitura (offline-first das consultas).
+    this.version(3).stores({ cache: "key" });
   }
 }
 
