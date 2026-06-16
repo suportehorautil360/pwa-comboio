@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { login } from "@/lib/api/auth";
 import { syncAll } from "@/lib/data/sync";
-import { saveSession } from "@/lib/session";
+import { getSessionUser, saveSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,18 @@ export function LoginForm() {
   const [senha, setSenha] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [erro, setErro] = useState("");
+  // Já tem sessão válida (salva localmente)? Entra direto — é o que faz o app
+  // "abrir logado" offline, sem bater no servidor de login. `getSessionUser`
+  // devolve null se a janela confiável de 7d venceu (aí pede login mesmo).
+  const [verificandoSessao, setVerificandoSessao] = useState(true);
+
+  useEffect(() => {
+    if (getSessionUser()) {
+      router.replace("/dashboard");
+      return;
+    }
+    queueMicrotask(() => setVerificandoSessao(false));
+  }, [router]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,6 +44,15 @@ export function LoginForm() {
       setErro(e instanceof Error ? e.message : "Não foi possível entrar.");
       setIsLoading(false);
     }
+  }
+
+  // Enquanto decide (tem sessão? → dashboard), não pisca o formulário.
+  if (verificandoSessao) {
+    return (
+      <p className="py-2 text-center text-sm text-muted-foreground">
+        Carregando…
+      </p>
+    );
   }
 
   return (
