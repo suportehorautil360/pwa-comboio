@@ -3,6 +3,7 @@
  * A batida é gravada na outbox (offline-first) e enviada para POST /time-records.
  * A leitura (folha/histórico/comprovante) usa GET /time-records/:prefeituraId.
  */
+import { submit, type SubmitResult } from "../offline/outbox";
 import { api } from "./client";
 
 export type TipoPonto = "entrada" | "almoco" | "volta" | "saida";
@@ -70,15 +71,21 @@ export const pontoApi = {
   /**
    * Solicita correção do horário de uma batida (operador). Cria um ajuste no
    * ledger, pendente de aprovação do gestor — não altera a batida original.
+   * Offline-first: passa pelo outbox (path dinâmico com o id da batida), então
+   * funciona sem rede e sincroniza sozinho.
    */
   async editarHorario(
     id: string,
     timestampOriginal: string,
     motivo?: string,
-  ): Promise<void> {
-    await api.post(`/time-records/update/${id}`, {
-      timestampOriginal,
-      ...(motivo?.trim() ? { motivo: motivo.trim() } : {}),
-    });
+  ): Promise<SubmitResult> {
+    return submit(
+      "editar-ponto",
+      {
+        timestampOriginal,
+        ...(motivo?.trim() ? { motivo: motivo.trim() } : {}),
+      },
+      { path: `/time-records/update/${id}` },
+    );
   },
 };

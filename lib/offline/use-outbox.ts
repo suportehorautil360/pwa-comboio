@@ -14,6 +14,9 @@ import {
 
 const VAZIO: OutboxCounts = { pendentes: 0, falhos: 0 };
 
+/** Kinds de ponto — sincronizam pela outbox mas não são lançamentos de frota. */
+const PONTO_KINDS = new Set<string>(["ponto", "editar-ponto", "solicitacao"]);
+
 /**
  * Contadores do outbox (pendentes/falhos) e disparo da sincronização —
  * ao montar, quando a rede volta e a cada 30s.
@@ -59,11 +62,39 @@ export function useOutboxItems(): LancamentoPendente[] {
     let ativo = true;
     const atualizar = () => {
       void listItems().then((its) => {
-        // Ponto sincroniza pela mesma outbox, mas não é um lançamento de frota.
+        // Ponto (batida/ajuste/solicitação) sincroniza pela mesma outbox, mas
+        // não é um lançamento de frota — fica fora deste feed.
         if (ativo)
           setItems(
-            its.filter((i) => i.kind !== "ponto").map(itemParaLancamento),
+            its
+              .filter((i) => !PONTO_KINDS.has(i.kind))
+              .map(itemParaLancamento),
           );
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
+}
+
+/**
+ * Itens em erro definitivo (dead-letter), de qualquer tipo (frota e ponto) —
+ * para a UI de reprocesso/descarte. Reage às mudanças da fila.
+ */
+export function useOutboxFailed(): LancamentoPendente[] {
+  const [items, setItems] = useState<LancamentoPendente[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its.filter((i) => i.failed).map(itemParaLancamento));
       });
     };
     const unsub = subscribe(atualizar);

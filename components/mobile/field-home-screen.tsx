@@ -13,17 +13,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
-import {
-  getUltimosLancamentos,
-  type LancamentoItem,
-  type TanqueComboio,
-} from "@/lib/api/dashboard";
-import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
+import { type TanqueComboio } from "@/lib/api/dashboard";
+import { useComboios, useUltimosLancamentos } from "@/lib/data/queries";
 import { useOutboxItems } from "@/lib/offline/use-outbox";
 import {
   getComboioSelecionado,
   getSessionUser,
   setComboioSelecionado,
+  type SessionUser,
 } from "@/lib/session";
 
 function labelComboio(t: TanqueComboio): string {
@@ -38,13 +35,21 @@ function labelComboio(t: TanqueComboio): string {
 
 export function FieldHomeScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [comboios, setComboios] = useState<ComboioItem[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [comboioId, setComboioId] = useState("");
-  const [lancamentos, setLancamentos] = useState<LancamentoItem[]>([]);
   const [online, setOnline] = useState(true);
-  const [loading, setLoading] = useState(true);
   const pendentes = useOutboxItems();
+
+  // Leitura offline-first: comboios + últimos lançamentos cacheados.
+  const { data: comboiosData, loading: loadingComboios } = useComboios(
+    user?.prefeituraId,
+    user?.funcionarioId,
+  );
+  const { data: lancData } = useUltimosLancamentos(user?.prefeituraId);
+  const comboios = useMemo(() => comboiosData ?? [], [comboiosData]);
+  const lancamentos = lancData ?? [];
+  const nome = user?.nome ?? "";
+  const loading = !user || loadingComboios;
 
   const comboioSel = useMemo(
     () => comboios.find((c) => c.id === comboioId) ?? null,
@@ -53,40 +58,29 @@ export function FieldHomeScreen() {
   const tank = comboioSel?.tank ?? null;
 
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId || !user.funcionarioId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    const fid = user.funcionarioId;
-    let ativo = true;
-    void (async () => {
-      if (ativo) setNome(user.nome);
-      try {
-        const [lista, l] = await Promise.all([
-          listarComboiosDoMotorista(pid, fid),
-          getUltimosLancamentos(pid),
-        ]);
-        if (!ativo) return;
-        setComboios(lista);
-        const salvo = getComboioSelecionado();
-        setComboioId(
-          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
-            lista[0]?.id ||
-            "",
-        );
-        setLancamentos(l);
-      } catch {
-        /* mantém vazio em caso de erro */
-      } finally {
-        if (ativo) setLoading(false);
-      }
-    })();
-    return () => {
-      ativo = false;
-    };
+    queueMicrotask(() => setUser(u));
   }, [router]);
+
+  // Seleciona o comboio (salvo ou primeiro) quando a lista chega.
+  useEffect(() => {
+    if (comboios.length === 0) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboios.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboios.some((c) => c.id === salvo) && salvo) ||
+          comboios[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboios]);
 
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);

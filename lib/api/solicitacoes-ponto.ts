@@ -2,6 +2,7 @@
  * Solicitações de ajuste de ponto (módulo solicitacoes-ponto do back-360-).
  * Um recurso atende incluir / cancelar / abono / mensagem.
  */
+import { submit, type SubmitResult } from "../offline/outbox";
 import { api } from "./client";
 import type { TipoPonto } from "./ponto";
 
@@ -44,12 +45,13 @@ export interface CriarSolicitacaoInput {
 }
 
 export const solicitacoesPontoApi = {
-  async criar(input: CriarSolicitacaoInput): Promise<SolicitacaoPonto> {
-    const r = await api.post<{ data: SolicitacaoPonto }>(
-      "/solicitacoes-ponto",
-      input,
-    );
-    return r.data;
+  /**
+   * Cria uma solicitação de ajuste de ponto. Offline-first: passa pelo outbox,
+   * então funciona sem rede e sincroniza sozinho. Devolve `{ synced }` — a tela
+   * mostra a mensagem certa ("enviada ao gestor" vs "salva no aparelho").
+   */
+  async criar(input: CriarSolicitacaoInput): Promise<SubmitResult> {
+    return submit("solicitacao", input);
   },
 
   async listar(prefeituraId: string): Promise<SolicitacaoPonto[]> {

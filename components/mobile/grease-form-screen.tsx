@@ -15,17 +15,21 @@ import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
 import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
+import { useEquipamentos } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
 import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, type SessionUser } from "@/lib/session";
 
 export function GreaseFormScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const nome = user?.nome ?? "";
+
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data } = useEquipamentos(user?.prefeituraId);
+  const equipamentos = data ?? [];
 
   const [equipment, setEquipment] = useState("");
   const [measurement, setMeasurement] = useState<MeasurementType>("horimetro");
@@ -44,20 +48,12 @@ export function GreaseFormScreen() {
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    void (async () => {
-      setNome(user.nome);
-      try {
-        setEquipamentos(await listarEquipamentos(pid));
-      } catch {
-        setEquipamentos([]);
-      }
-    })();
+    queueMicrotask(() => setUser(u));
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));

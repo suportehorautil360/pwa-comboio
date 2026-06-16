@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -14,11 +14,11 @@ import {
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  solicitacoesPontoApi,
   type SolicitacaoPonto,
   type StatusSolicitacao,
   type TipoSolicitacao,
 } from "@/lib/api/solicitacoes-ponto";
+import { useSolicitacoes } from "@/lib/data/queries";
 import { limparCpf } from "@/lib/ponto/cpf";
 import { getSessionUser, type SessionUser } from "@/lib/session";
 
@@ -74,35 +74,22 @@ function ehMinha(s: SolicitacaoPonto, user: SessionUser): boolean {
 
 export function MinhasSolicitacoesScreen() {
   const router = useRouter();
-  const [lista, setLista] = useState<SolicitacaoPonto[]>([]);
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState("");
   const [filtro, setFiltro] = useState<"todas" | StatusSolicitacao>("todas");
   const [anexo, setAnexo] = useState<string | null>(null);
 
-  const carregar = useCallback(async () => {
+  // Leitura offline-first: lista cacheada na hora, revalida em background.
+  const { data, loading: carregando } = useSolicitacoes(user?.prefeituraId);
+  const lista = useMemo<SolicitacaoPonto[]>(() => data ?? [], [data]);
+
+  useEffect(() => {
     const u = getSessionUser();
     if (!u) {
       router.replace("/");
       return;
     }
-    try {
-      const todas = await solicitacoesPontoApi.listar(u.prefeituraId);
-      setUser(u);
-      setLista(todas);
-      setErro("");
-    } catch {
-      setUser(u);
-      setErro("Não foi possível carregar suas solicitações.");
-    } finally {
-      setCarregando(false);
-    }
+    queueMicrotask(() => setUser(u));
   }, [router]);
-
-  useEffect(() => {
-    queueMicrotask(() => void carregar());
-  }, [carregar]);
 
   const minhas = useMemo(() => {
     if (!user) return [];
@@ -155,12 +142,6 @@ export function MinhasSolicitacoesScreen() {
           </button>
         ))}
       </div>
-
-      {erro ? (
-        <p className="text-sm text-destructive" role="alert">
-          {erro}
-        </p>
-      ) : null}
 
       {carregando ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
