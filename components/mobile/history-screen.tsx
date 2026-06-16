@@ -7,13 +7,10 @@ import { Fuel, Sun } from "lucide-react";
 import { ActivityItem } from "@/components/mobile/activity-item";
 import { FieldHeader } from "@/components/mobile/field-header";
 import { HistoryStatCard } from "@/components/mobile/history-stat-card";
-import {
-  getHistorico,
-  type HistoricoGroup,
-  type HistoricoSummary,
-} from "@/lib/api/dashboard";
+import { type HistoricoSummary } from "@/lib/api/dashboard";
+import { useHistorico } from "@/lib/data/queries";
 import { useOutboxItems } from "@/lib/offline/use-outbox";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, type SessionUser } from "@/lib/session";
 
 const RESUMO_VAZIO: HistoricoSummary = {
   totalLitersToday: 0,
@@ -23,38 +20,23 @@ const RESUMO_VAZIO: HistoricoSummary = {
 
 export function HistoryScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [summary, setSummary] = useState<HistoricoSummary>(RESUMO_VAZIO);
-  const [groups, setGroups] = useState<HistoricoGroup[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [online, setOnline] = useState(true);
-  const [loading, setLoading] = useState(true);
   const pendentes = useOutboxItems();
 
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data, loading } = useHistorico(user?.prefeituraId);
+  const summary = data?.summary ?? RESUMO_VAZIO;
+  const groups = data?.groups ?? [];
+  const nome = user?.nome ?? "";
+
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    let ativo = true;
-    void (async () => {
-      if (ativo) setNome(user.nome);
-      try {
-        const h = await getHistorico(pid);
-        if (ativo) {
-          setSummary(h.summary);
-          setGroups(h.groups);
-        }
-      } catch {
-        /* mantém vazio */
-      } finally {
-        if (ativo) setLoading(false);
-      }
-    })();
-    return () => {
-      ativo = false;
-    };
+    queueMicrotask(() => setUser(u));
   }, [router]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wifi } from "lucide-react";
 
@@ -22,19 +22,19 @@ import {
   type ReabastecimentoSource,
 } from "@/lib/api/reabastecimento";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
-import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
+import { useComboios } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
 import { setFlash } from "@/lib/flash";
 import {
   getComboioSelecionado,
   getSessionUser,
   setComboioSelecionado,
+  type SessionUser,
 } from "@/lib/session";
 
 export function ComboioRefillScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [comboios, setComboios] = useState<ComboioItem[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [comboioId, setComboioId] = useState("");
   const [source, setSource] = useState<ReabastecimentoSource>("gasStation");
   const [liters, setLiters] = useState("");
@@ -43,35 +43,35 @@ export function ComboioRefillScreen() {
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
 
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data } = useComboios(user?.prefeituraId, user?.funcionarioId);
+  const comboios = useMemo(() => data ?? [], [data]);
+  const nome = user?.nome ?? "";
+
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId || !user.funcionarioId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    const fid = user.funcionarioId;
-    let ativo = true;
-    void (async () => {
-      if (ativo) setNome(user.nome);
-      try {
-        const lista = await listarComboiosDoMotorista(pid, fid);
-        if (!ativo) return;
-        setComboios(lista);
-        const salvo = getComboioSelecionado();
-        setComboioId(
-          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
-            lista[0]?.id ||
-            "",
-        );
-      } catch {
-        if (ativo) setComboios([]);
-      }
-    })();
-    return () => {
-      ativo = false;
-    };
+    queueMicrotask(() => setUser(u));
   }, [router]);
+
+  // Seleciona o comboio salvo (ou o primeiro) quando a lista chega.
+  useEffect(() => {
+    if (comboios.length === 0) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboios.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboios.some((c) => c.id === salvo) && salvo) ||
+          comboios[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboios]);
 
   function trocarComboio(id: string) {
     setComboioId(id);

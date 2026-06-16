@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,13 +19,12 @@ import { PhotoUpload } from "@/components/mobile/photo-upload";
 import { SolicitarAjustes } from "@/components/mobile/solicitar-ajustes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { configuracoesApi, type EmpresaConfig } from "@/lib/api/configuracoes";
 import {
-  pontoApi,
   TIPOS_PONTO,
   type PontoRegistro,
   type TipoPonto,
 } from "@/lib/api/ponto";
+import { useEmpresa, useTimeRecords } from "@/lib/data/queries";
 import { enqueue, flushOutbox } from "@/lib/offline/outbox";
 import { limparCpf } from "@/lib/ponto/cpf";
 import { baixarCRPT, montarCRPT, podeEmitirCRPT } from "@/lib/ponto/crpt";
@@ -86,9 +85,6 @@ function selo(reg: BatidaEfetiva): { label: string; classe: string } {
 export function MeuPontoScreen() {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [todas, setTodas] = useState<PontoRegistro[]>([]);
-  const [empresa, setEmpresa] = useState<EmpresaConfig | null>(null);
-  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
   const [batendo, setBatendo] = useState<TipoPonto | null>(null);
@@ -97,32 +93,29 @@ export function MeuPontoScreen() {
   const [editando, setEditando] = useState<PontoRegistro | null>(null);
   const [sucesso, setSucesso] = useState("");
 
-  const carregar = useCallback(async () => {
+  // Leitura offline-first: batidas + dados da empresa cacheados.
+  const {
+    data: recordsData,
+    loading: loadingRecords,
+    refetch: recarregar,
+  } = useTimeRecords(user?.prefeituraId);
+  const { data: empresaData } = useEmpresa(user?.prefeituraId);
+  const empresa = empresaData ?? null;
+  const carregando = !user || loadingRecords;
+  const todas = useMemo(
+    () =>
+      user ? (recordsData ?? []).filter((r) => ehDoOperador(r, user)) : [],
+    [recordsData, user],
+  );
+
+  useEffect(() => {
     const u = getSessionUser();
     if (!u) {
       router.replace("/");
       return;
     }
-    try {
-      const [lista, emp] = await Promise.all([
-        pontoApi.listar(u.prefeituraId),
-        configuracoesApi.obterEmpresa(u.prefeituraId),
-      ]);
-      setUser(u);
-      setTodas(lista.filter((r) => ehDoOperador(r, u)));
-      setEmpresa(emp);
-      setErro("");
-    } catch {
-      setUser(u);
-      setErro("Não foi possível carregar suas batidas. Verifique a conexão.");
-    } finally {
-      setCarregando(false);
-    }
+    queueMicrotask(() => setUser(u));
   }, [router]);
-
-  useEffect(() => {
-    queueMicrotask(() => void carregar());
-  }, [carregar]);
 
   const efetivas = useMemo(() => resolverLedger(todas), [todas]);
 
@@ -188,7 +181,7 @@ export function MeuPontoScreen() {
       setBatendo(null);
       setFoto("");
       await flushOutbox();
-      await carregar();
+      recarregar();
     } catch {
       setErro("Não foi possível registrar a batida. Tente de novo.");
     } finally {
@@ -374,7 +367,7 @@ export function MeuPontoScreen() {
           nome={user.nome}
           cpf={user.cpf}
           batidas={efetivas}
-          onEnviado={() => void carregar()}
+          onEnviado={() => recarregar()}
         />
       ) : null}
 
@@ -426,7 +419,7 @@ export function MeuPontoScreen() {
         onSalvo={() => {
           setEditando(null);
           setSucesso("Correção enviada — pendente de aprovação do gestor.");
-          void carregar();
+          recarregar();
         }}
       />
     </div>

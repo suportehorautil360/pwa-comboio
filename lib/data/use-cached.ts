@@ -33,21 +33,25 @@ export function useCached<T>(
   const refetch = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
-    if (!key) {
-      setLoading(false);
-      return;
-    }
     let ativo = true;
-    setLoading(true);
-    const online = typeof navigator === "undefined" || navigator.onLine;
+    // setState só dentro de callbacks assíncronos (evita re-render em cascata
+    // no corpo do efeito e o "Carregando…" piscando a cada revalidação).
+    if (!key) {
+      queueMicrotask(() => {
+        if (ativo) setLoading(false);
+      });
+      return () => {
+        ativo = false;
+      };
+    }
 
     void cacheEntry<T>(key).then((entry) => {
       if (!ativo) return;
       if (entry) {
         setData(entry.data);
         setFromCache(true);
-        setLoading(false);
       }
+      const online = typeof navigator === "undefined" || navigator.onLine;
       const stale = !entry || isStale(entry.cachedAt, opts?.ttl ?? 0);
       if (!online || !stale) {
         setLoading(false);

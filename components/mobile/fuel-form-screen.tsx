@@ -22,14 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  listarEquipamentos,
-  listarPostos,
-  type EquipamentoApi,
-  type PostoApi,
-} from "@/lib/api/abastecimento";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
-import { listarComboiosDoMotorista, type ComboioItem } from "@/lib/api/comboios";
+import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
 import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
@@ -37,6 +31,7 @@ import {
   getComboioSelecionado,
   getSessionUser,
   setComboioSelecionado,
+  type SessionUser,
 } from "@/lib/session";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -50,9 +45,18 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export function FuelFormScreen() {
   const router = useRouter();
-  const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
-  const [postos, setPostos] = useState<PostoApi[]>([]);
-  const [comboios, setComboios] = useState<ComboioItem[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data: equipData } = useEquipamentos(user?.prefeituraId);
+  const { data: postosData } = usePostos(user?.prefeituraId);
+  const { data: comboiosData } = useComboios(
+    user?.prefeituraId,
+    user?.funcionarioId,
+  );
+  const equipamentos = equipData ?? [];
+  const postos = postosData ?? [];
+  const comboios = comboiosData ?? [];
 
   const [comboioId, setComboioId] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -84,29 +88,12 @@ export function FuelFormScreen() {
     litrosNum > saldoCache;
 
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId || !user.funcionarioId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    void listarEquipamentos(pid)
-      .then(setEquipamentos)
-      .catch(() => setEquipamentos([]));
-    void listarPostos(pid)
-      .then(setPostos)
-      .catch(() => setPostos([]));
-    void listarComboiosDoMotorista(pid, user.funcionarioId)
-      .then((lista) => {
-        setComboios(lista);
-        const salvo = getComboioSelecionado();
-        setComboioId(
-          (salvo && lista.some((c) => c.id === salvo) && salvo) ||
-            lista[0]?.id ||
-            "",
-        );
-      })
-      .catch(() => setComboios([]));
+    queueMicrotask(() => setUser(u));
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));
@@ -121,6 +108,22 @@ export function FuelFormScreen() {
       { enableHighAccuracy: true, timeout: 10000 },
     );
   }, [router]);
+
+  // Seleciona o comboio assim que a lista (cache ou rede) chega.
+  useEffect(() => {
+    if (!comboiosData) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboiosData.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboiosData.some((c) => c.id === salvo) && salvo) ||
+          comboiosData[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboiosData]);
 
   function trocarComboio(id: string) {
     setComboioId(id);
