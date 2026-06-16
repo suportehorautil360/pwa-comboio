@@ -10,6 +10,7 @@ import {
   subscribe,
   type LancamentoPendente,
   type OutboxCounts,
+  type OutboxItem,
 } from "./outbox";
 
 const VAZIO: OutboxCounts = { pendentes: 0, falhos: 0 };
@@ -70,6 +71,31 @@ export function useOutboxItems(): LancamentoPendente[] {
               .filter((i) => !PONTO_KINDS.has(i.kind))
               .map(itemParaLancamento),
           );
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
+}
+
+/**
+ * Itens crus da fila (com payload), reativos. Para o otimismo de UI — mesclar
+ * batidas pendentes na folha do ponto, descontar o saldo do tanque, etc.
+ */
+export function useOutboxRaw(): OutboxItem[] {
+  const [items, setItems] = useState<OutboxItem[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its);
       });
     };
     const unsub = subscribe(atualizar);

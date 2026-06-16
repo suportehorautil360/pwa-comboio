@@ -15,7 +15,8 @@ import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { type TanqueComboio } from "@/lib/api/dashboard";
 import { useComboios, useUltimosLancamentos } from "@/lib/data/queries";
-import { useOutboxItems } from "@/lib/offline/use-outbox";
+import { saldoPendenteDelta } from "@/lib/offline/pendentes";
+import { useOutboxItems, useOutboxRaw } from "@/lib/offline/use-outbox";
 import {
   getComboioSelecionado,
   getSessionUser,
@@ -56,6 +57,12 @@ export function FieldHomeScreen() {
     [comboios, comboioId],
   );
   const tank = comboioSel?.tank ?? null;
+
+  // Otimismo de UI: desconta/soma os lançamentos ainda na fila no saldo exibido
+  // (atribuídos ao comboio do turno — o front não guarda comboioId por item).
+  const raw = useOutboxRaw();
+  const saldoDelta = useMemo(() => saldoPendenteDelta(raw), [raw]);
+  const saldoLocal = Math.max(0, (tank?.currentVolume ?? 0) + saldoDelta);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -126,14 +133,11 @@ export function FieldHomeScreen() {
             </p>
           </div>
 
-          <FuelGauge
-            value={tank?.currentVolume ?? 0}
-            max={tank?.capacity ?? 0}
-          />
+          <FuelGauge value={saldoLocal} max={tank?.capacity ?? 0} />
 
           <div className="flex items-end justify-between gap-4">
             <p className="text-3xl font-semibold tabular-nums tracking-tight">
-              {(tank?.currentVolume ?? 0).toLocaleString("pt-BR")}{" "}
+              {saldoLocal.toLocaleString("pt-BR")}{" "}
               <span className="text-lg font-medium text-muted-foreground">
                 L
               </span>
