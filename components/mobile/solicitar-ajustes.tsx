@@ -41,6 +41,13 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Mensagem de conclusão: online confirma o envio; offline avisa que ficou na fila. */
+function msgEnvio(synced: boolean, online: string): string {
+  return synced
+    ? online
+    : "Salvo no aparelho — vai ao gestor assim que reconectar.";
+}
+
 function hojeIso(): string {
   const h = new Date();
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, "0")}-${String(h.getDate()).padStart(2, "0")}`;
@@ -188,7 +195,7 @@ export function SolicitarAjustes({
     setErro("");
     setEnviando(true);
     try {
-      await solicitacoesPontoApi.criar({
+      const { synced } = await solicitacoesPontoApi.criar({
         tipo: "cancelar",
         prefeituraId,
         name: nome,
@@ -196,7 +203,7 @@ export function SolicitarAjustes({
         batidaId: cancBatidaId,
         observacao: cancMotivo.trim(),
       });
-      concluir("Solicitação de cancelamento enviada ao gestor.");
+      concluir(msgEnvio(synced, "Solicitação de cancelamento enviada ao gestor."));
     } catch {
       setEnviando(false);
       setErro("Não foi possível enviar. Verifique a conexão.");
@@ -216,7 +223,7 @@ export function SolicitarAjustes({
     setEnviando(true);
     try {
       const anexoDataUrl = aboAnexo ? await fileToDataUrl(aboAnexo) : undefined;
-      await solicitacoesPontoApi.criar({
+      const { synced } = await solicitacoesPontoApi.criar({
         tipo: "abono",
         prefeituraId,
         name: nome,
@@ -226,7 +233,7 @@ export function SolicitarAjustes({
         anexoDataUrl,
         anexoNome: aboAnexo?.name,
       });
-      concluir("Solicitação de abono enviada ao gestor.");
+      concluir(msgEnvio(synced, "Solicitação de abono enviada ao gestor."));
     } catch {
       setEnviando(false);
       setErro("Não foi possível enviar. Verifique a conexão.");
@@ -241,14 +248,14 @@ export function SolicitarAjustes({
     setErro("");
     setEnviando(true);
     try {
-      await solicitacoesPontoApi.criar({
+      const { synced } = await solicitacoesPontoApi.criar({
         tipo: "mensagem",
         prefeituraId,
         name: nome,
         cpf,
         observacao: msgTexto.trim(),
       });
-      concluir("Mensagem enviada ao gestor.");
+      concluir(msgEnvio(synced, "Mensagem enviada ao gestor."));
     } catch {
       setEnviando(false);
       setErro("Não foi possível enviar. Verifique a conexão.");

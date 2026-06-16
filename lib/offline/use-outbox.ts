@@ -82,3 +82,28 @@ export function useOutboxItems(): LancamentoPendente[] {
 
   return items;
 }
+
+/**
+ * Itens em erro definitivo (dead-letter), de qualquer tipo (frota e ponto) —
+ * para a UI de reprocesso/descarte. Reage às mudanças da fila.
+ */
+export function useOutboxFailed(): LancamentoPendente[] {
+  const [items, setItems] = useState<LancamentoPendente[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its.filter((i) => i.failed).map(itemParaLancamento));
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
+}
