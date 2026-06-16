@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { type PontoRegistro } from "@/lib/api/ponto";
 import { useAbonos, useEscala, useTimeRecords } from "@/lib/data/queries";
+import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { formatarCpf, limparCpf } from "@/lib/ponto/cpf";
 import {
   ESPELHO_COLUNAS,
@@ -101,10 +103,23 @@ export function EspelhoScreen() {
   const escala = escalaData ?? null;
   const abonos = useMemo(() => abonosData ?? [], [abonosData]);
   const carregando = !user || loadingRecords;
+
+  // Otimismo de UI: batidas ainda na fila aparecem no espelho (não editáveis).
+  const raw = useOutboxRaw();
+  const pendentes = useMemo(() => batidasPendentes(raw), [raw]);
+  const pendentesIds = useMemo(
+    () => new Set(pendentes.map((b) => b.id)),
+    [pendentes],
+  );
   const todas = useMemo(
     () =>
-      user ? (recordsData ?? []).filter((r) => ehDoOperador(r, user)) : [],
-    [recordsData, user],
+      user
+        ? mesclarBatidas(
+            (recordsData ?? []).filter((r) => ehDoOperador(r, user)),
+            pendentes.filter((b) => ehDoOperador(b, user)),
+          )
+        : [],
+    [recordsData, user, pendentes],
   );
 
   useEffect(() => {
@@ -241,7 +256,11 @@ export function EspelhoScreen() {
           dia={diaDetalhe.dia}
           batidas={diaDetalhe.batidas}
           onVoltar={() => setDiaDetalhe(null)}
-          onEditar={(b) => setEditando(b)}
+          onEditar={(b) => {
+            // Batida ainda na fila não pode ser corrigida (id é do outbox, não
+            // existe no servidor) — ignora até sincronizar.
+            if (!pendentesIds.has(b.id)) setEditando(b);
+          }}
           onIncluir={(dia, tipo) => {
             setSucesso("");
             setIncluirAberto({ data: dia, tipo });

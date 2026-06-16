@@ -26,6 +26,8 @@ import {
 } from "@/lib/api/ponto";
 import { useEmpresa, useTimeRecords } from "@/lib/data/queries";
 import { enqueue, flushOutbox } from "@/lib/offline/outbox";
+import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { limparCpf } from "@/lib/ponto/cpf";
 import { baixarCRPT, montarCRPT, podeEmitirCRPT } from "@/lib/ponto/crpt";
 import { resolverLedger, type BatidaEfetiva } from "@/lib/ponto/resolver-ledger";
@@ -76,7 +78,12 @@ function ehDoOperador(r: PontoRegistro, user: SessionUser): boolean {
   );
 }
 
-function selo(reg: BatidaEfetiva): { label: string; classe: string } {
+function selo(
+  reg: BatidaEfetiva,
+  pendente: boolean,
+): { label: string; classe: string } {
+  if (pendente)
+    return { label: "Pendente de envio", classe: "text-amber-500" };
   if (reg.ajustePendente)
     return { label: "Ajuste pendente", classe: "text-amber-500" };
   return { label: "Registrado", classe: "text-success" };
@@ -102,10 +109,23 @@ export function MeuPontoScreen() {
   const { data: empresaData } = useEmpresa(user?.prefeituraId);
   const empresa = empresaData ?? null;
   const carregando = !user || loadingRecords;
+
+  // Otimismo de UI: batidas ainda na fila aparecem na folha como "pendente".
+  const raw = useOutboxRaw();
+  const pendentes = useMemo(() => batidasPendentes(raw), [raw]);
+  const pendentesIds = useMemo(
+    () => new Set(pendentes.map((b) => b.id)),
+    [pendentes],
+  );
   const todas = useMemo(
     () =>
-      user ? (recordsData ?? []).filter((r) => ehDoOperador(r, user)) : [],
-    [recordsData, user],
+      user
+        ? mesclarBatidas(
+            (recordsData ?? []).filter((r) => ehDoOperador(r, user)),
+            pendentes.filter((b) => ehDoOperador(b, user)),
+          )
+        : [],
+    [recordsData, user, pendentes],
   );
 
   useEffect(() => {
@@ -225,7 +245,8 @@ export function MeuPontoScreen() {
           <h2 className="pb-1 text-sm font-semibold">Hoje</h2>
           {TIPOS_PONTO.map(({ tipo, label }) => {
             const reg = porTipoHoje.get(tipo);
-            const s = reg ? selo(reg) : null;
+            const ehPendente = reg ? pendentesIds.has(reg.id) : false;
+            const s = reg ? selo(reg, ehPendente) : null;
             return (
               <div key={tipo} className="border-t border-border py-2.5">
                 <div className="flex items-center justify-between gap-3">
@@ -236,7 +257,7 @@ export function MeuPontoScreen() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {reg && podeEmitirCRPT(reg) ? (
+                    {reg && !ehPendente && podeEmitirCRPT(reg) ? (
                       <Button
                         type="button"
                         variant="ghost"
@@ -248,7 +269,7 @@ export function MeuPontoScreen() {
                         Comprovante
                       </Button>
                     ) : null}
-                    {reg ? (
+                    {reg && !ehPendente ? (
                       <Button
                         type="button"
                         variant="ghost"
