@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Truck } from "lucide-react";
 
 import { brand } from "@/lib/design-system";
@@ -11,15 +12,34 @@ type FieldHeaderProps = {
   nome?: string;
   /** Cargo/papel. Padrão: COMBOÍSTA. */
   papel?: string;
+  /**
+   * Override opcional do estado de conexão. Por padrão o header detecta sozinho
+   * (`navigator.onLine` + eventos) — antes, telas que não passavam o prop ficavam
+   * presas em "Online" mesmo offline.
+   */
   online?: boolean;
 };
 
 export function FieldHeader({
   nome,
   papel = "COMBOÍSTA",
-  online = true,
+  online: onlineProp,
 }: FieldHeaderProps) {
   const { pendentes, falhos } = useOutbox();
+  const [onlineAuto, setOnlineAuto] = useState(true);
+
+  useEffect(() => {
+    const sync = () => setOnlineAuto(navigator.onLine);
+    queueMicrotask(sync);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
+  const online = onlineProp ?? onlineAuto;
 
   let status = online ? "Sincronizado" : "Offline";
   if (falhos > 0) status = `${falhos} com erro`;
