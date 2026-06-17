@@ -25,6 +25,7 @@ import { getHistorico, getUltimosLancamentos } from "../api/dashboard";
 import { escalaApi } from "../api/escala";
 import { pontoApi } from "../api/ponto";
 import { solicitacoesPontoApi } from "../api/solicitacoes-ponto";
+import { provisionarRoster } from "../auth/roster";
 import { flushOutbox } from "../offline/outbox";
 import type { SessionUser } from "../session";
 import { cacheEntry, cachePut, isStale } from "./cache";
@@ -121,8 +122,13 @@ export async function syncAll(
   if (!online || sincronizando) return;
   sincronizando = true;
   try {
-    await Promise.all(
-      RESOURCES.map(async (r) => {
+    await Promise.all([
+      // Pré-cacheia os verificadores p/ login offline multiusuário (só ao
+      // logar/reconectar — dado sensível, não a cada foco).
+      opts?.force
+        ? provisionarRoster(user.prefeituraId)
+        : Promise.resolve(),
+      ...RESOURCES.map(async (r) => {
         const key = r.key(user);
         if (!key) return;
         const entry = await cacheEntry(key);
@@ -135,7 +141,7 @@ export async function syncAll(
           /* offline/erro: mantém o cache anterior */
         }
       }),
-    );
+    ]);
   } finally {
     sincronizando = false;
   }
