@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { cacheEntry, cachePut, isStale } from "./cache";
+import { cacheEntry, cachePut, isStale, subscribeCache } from "./cache";
 
 export interface CachedResult<T> {
   data: T | undefined;
@@ -76,6 +76,27 @@ export function useCached<T>(
     // `fetcher` é recriado a cada render; `key` (+ refetch) resume as dependências.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tick]);
+
+  // Reage a regravações do cache desta chave por OUTRO caminho (ex.: o syncAll
+  // revalidou em background ao reconectar). Re-lê o cache, sem refazer a rede —
+  // assim a tela montada não fica presa no dado velho.
+  useEffect(() => {
+    if (!key) return;
+    let ativo = true;
+    const unsub = subscribeCache((changed) => {
+      if (changed !== key) return;
+      void cacheEntry<T>(key).then((entry) => {
+        if (ativo && entry) {
+          setData(entry.data);
+          setFromCache(false);
+        }
+      });
+    });
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, [key]);
 
   return { data, loading, fromCache, refetch };
 }
