@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Truck } from "lucide-react";
+import { RotateCw, Truck } from "lucide-react";
 
 import { brand } from "@/lib/design-system";
 import { Badge } from "@/components/ui/badge";
+import { syncAll } from "@/lib/data/sync";
+import { flushOutbox } from "@/lib/offline/outbox";
 import { useOutbox } from "@/lib/offline/use-outbox";
+import { getSessionUser } from "@/lib/session";
 
 type FieldHeaderProps = {
   /** Nome do operador logado (ex.: "J. Ferreira"). */
@@ -27,6 +30,18 @@ export function FieldHeader({
 }: FieldHeaderProps) {
   const { pendentes, falhos } = useOutbox();
   const [onlineAuto, setOnlineAuto] = useState(true);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  async function sincronizar() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      await flushOutbox();
+      await syncAll(getSessionUser(), { force: true });
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   useEffect(() => {
     const sync = () => setOnlineAuto(navigator.onLine);
@@ -58,9 +73,24 @@ export function FieldHeader({
           />
           {online ? "Online" : "Offline"}
         </div>
-        <Badge variant="outline" className="uppercase tracking-wider">
-          {status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="uppercase tracking-wider">
+            {status}
+          </Badge>
+          <button
+            type="button"
+            onClick={() => void sincronizar()}
+            disabled={sincronizando}
+            aria-label="Sincronizar agora"
+            title="Sincronizar agora"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+          >
+            <RotateCw
+              className={`size-4 ${sincronizando ? "animate-spin" : ""}`}
+              aria-hidden
+            />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

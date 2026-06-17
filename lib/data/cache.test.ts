@@ -3,7 +3,29 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { db } from "../db";
-import { cacheEntry, cacheGet, cachePut, isStale } from "./cache";
+import {
+  cacheEntry,
+  cacheGet,
+  cachePut,
+  isStale,
+  subscribeCache,
+} from "./cache";
+
+describe("subscribeCache", () => {
+  beforeEach(async () => {
+    await db.cache.clear();
+  });
+
+  it("notifica a chave gravada a cada cachePut, e para após unsub", async () => {
+    const chaves: string[] = [];
+    const unsub = subscribeCache((k) => chaves.push(k));
+    await cachePut("k1", 1);
+    await cachePut("k2", 2);
+    unsub();
+    await cachePut("k3", 3);
+    expect(chaves).toEqual(["k1", "k2"]);
+  });
+});
 
 describe("isStale", () => {
   it("fresco dentro do TTL, stale fora ou sem cache", () => {
