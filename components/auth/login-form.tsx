@@ -8,6 +8,7 @@ import {
   loginOffline,
   salvarCredencialOffline,
 } from "@/lib/auth/offline-credential";
+import { loginPelaRoster } from "@/lib/auth/roster";
 import { syncAll } from "@/lib/data/sync";
 import { getSessionUser, restaurarSessao, saveSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
@@ -49,10 +50,20 @@ export function LoginForm() {
       router.push("/dashboard");
     } catch (e) {
       // Sem rede? valida a senha localmente (login offline) e restaura a sessão.
+      // 1) o próprio usuário deste aparelho — restaura sessão + token reais.
       const offline = await loginOffline(id, senha);
       if (offline) {
         restaurarSessao(offline.token, offline.user, offline.validoAte);
         void syncAll(offline.user, {});
+        router.push("/dashboard");
+        return;
+      }
+      // 2) qualquer condutor pré-cacheado (roster) — sem token (o back não exige
+      //    nas escritas; identifica pelo payload). Login offline multiusuário.
+      const viaRoster = await loginPelaRoster(id, senha);
+      if (viaRoster) {
+        restaurarSessao("", viaRoster.user, viaRoster.validoAte);
+        void syncAll(viaRoster.user, {});
         router.push("/dashboard");
         return;
       }
