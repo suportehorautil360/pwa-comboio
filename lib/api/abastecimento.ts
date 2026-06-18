@@ -11,6 +11,8 @@ export interface EquipamentoApi {
   placa?: string;
   tipo?: string;
   status?: string;
+  /** Capacidade do tanque (L); 0/ausente = sem limite. */
+  capacidadeTanque?: number;
 }
 
 export interface PostoApi {

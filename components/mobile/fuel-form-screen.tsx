@@ -37,6 +37,11 @@ import {
   type SessionUser,
 } from "@/lib/session";
 
+/** Normaliza placa/chassi para comparar (só letras/números, maiúsculas). */
+function alnum(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -90,6 +95,17 @@ export function FuelFormScreen() {
   const litrosNum = Number(liters);
   const semSaldo =
     !postoId && saldoOtim !== null && litrosNum > 0 && litrosNum > saldoOtim;
+
+  // Não abastecer além do que o tanque do EQUIPAMENTO comporta. Casa o que foi
+  // digitado (placa/chassi normalizado) com o cadastro; capacidade 0/ausente ou
+  // equipamento fora do cadastro = sem limite no front (o back é o gate final).
+  const equipSel = equipamentos.find(
+    (e) =>
+      alnum(e.placa ?? "") === alnum(equipment) ||
+      alnum(e.chassis ?? "") === alnum(equipment),
+  );
+  const capEquip = equipSel?.capacidadeTanque ?? 0;
+  const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
 
   useEffect(() => {
     const u = getSessionUser();
@@ -151,6 +167,12 @@ export function FuelFormScreen() {
     if (semSaldo) {
       setErro(
         `Acima do saldo do comboio (${saldoOtim?.toLocaleString("pt-BR")} L disponíveis). Reduza os litros.`,
+      );
+      return;
+    }
+    if (acimaCapacidade) {
+      setErro(
+        `Acima da capacidade do tanque do equipamento (${capEquip.toLocaleString("pt-BR")} L). Reduza os litros.`,
       );
       return;
     }
@@ -275,6 +297,13 @@ export function FuelFormScreen() {
               disponíveis). Reduza os litros.
             </p>
           ) : null}
+          {acimaCapacidade ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Acima da capacidade do tanque do equipamento (
+              {capEquip.toLocaleString("pt-BR")} L). Reduza os litros.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -357,7 +386,7 @@ export function FuelFormScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving || semSaldo}
+            disabled={isSaving || semSaldo || acimaCapacidade}
           >
             {isSaving ? "Salvando…" : "Salvar abastecimento"}
           </Button>
