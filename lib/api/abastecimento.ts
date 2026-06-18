@@ -55,3 +55,20 @@ export async function criarAbastecimento(
 ): Promise<void> {
   await api.post("/abastecimentos", payload);
 }
+
+/**
+ * Maior leitura (horímetro/km) já registrada para o equipamento — para validar a
+ * próxima antes de enviar. `null` = sem registro anterior (qualquer valor vale)
+ * ou equipamento fora do cadastro.
+ */
+export async function ultimaLeituraAbastecimento(
+  prefeituraId: string,
+  plateOrChassis: string,
+  measurementType: MeasurementType,
+): Promise<number | null> {
+  const qs = new URLSearchParams({ plateOrChassis, measurementType });
+  const r = await api.get<{ data: { ultimaLeitura: number | null } }>(
+    `/abastecimentos/ultima-leitura/${prefeituraId}?${qs.toString()}`,
+  );
+  return r.data?.ultimaLeitura ?? null;
+}
