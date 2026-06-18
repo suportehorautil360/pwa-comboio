@@ -114,14 +114,27 @@ export function FuelFormScreen() {
   const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
 
   // Leitura (horímetro/km) não pode ser igual/menor que a última do equipamento.
-  // Referência = a maior entre a última do servidor (busca online) e a maior já
-  // lançada na fila offline (a própria sequência do operador, sem rede).
+  // Referência = a MAIOR entre três fontes: a última do servidor (busca online),
+  // a maior já lançada na fila offline (sequência do próprio operador) e a
+  // medicaoAtual do equipamento no cache (baseline offline mesmo no 1º lançamento,
+  // só quando a unidade bate: km↔hodômetro, h↔horímetro).
   const leituraNum = Number(reading);
   const leituraPendente = maiorLeituraPendente(raw, equipment, measurement);
-  const ultimaRef =
-    ultimaLeitura !== null || leituraPendente !== null
-      ? Math.max(ultimaLeitura ?? 0, leituraPendente ?? 0)
+  const unidadeBate =
+    (measurement === "hodometro" && equipSel?.unidadeRevisao === "km") ||
+    (measurement === "horimetro" && equipSel?.unidadeRevisao === "h");
+  const equipLeitura =
+    unidadeBate && typeof equipSel?.medicaoAtual === "number"
+      ? equipSel.medicaoAtual
       : null;
+  const candidatosLeitura = [
+    ultimaLeitura,
+    leituraPendente,
+    equipLeitura,
+  ].filter((v): v is number => typeof v === "number");
+  const ultimaRef = candidatosLeitura.length
+    ? Math.max(...candidatosLeitura)
+    : null;
   const leituraInvalida =
     ultimaRef !== null &&
     Number.isFinite(leituraNum) &&
