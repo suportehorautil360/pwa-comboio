@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import type { OutboxItem } from "../db";
 import {
   batidasPendentes,
+  capacidadeDisponivel,
   mesclarBatidas,
+  saldoOtimista,
   saldoPendenteDelta,
 } from "./pendentes";
 
@@ -109,5 +111,43 @@ describe("saldoPendenteDelta", () => {
         item({ kind: "reabastecimento", failed: true, payload: { receivedLiters: 99 } }),
       ]),
     ).toBe(0);
+  });
+});
+
+describe("saldoOtimista", () => {
+  it("soma o delta da fila ao saldo do servidor", () => {
+    const itens = [
+      item({ kind: "reabastecimento", payload: { receivedLiters: 200 } }),
+      item({ kind: "abastecimento", payload: { liters: 50 } }),
+    ];
+    expect(saldoOtimista(500, itens)).toBe(650);
+  });
+
+  it("nunca fica negativo", () => {
+    const itens = [item({ kind: "abastecimento", payload: { liters: 100 } })];
+    expect(saldoOtimista(10, itens)).toBe(0);
+  });
+});
+
+describe("capacidadeDisponivel", () => {
+  it("desconta o saldo otimista da capacidade", () => {
+    const itens = [item({ kind: "reabastecimento", payload: { receivedLiters: 200 } })];
+    expect(capacidadeDisponivel(1000, 500, itens)).toBe(300);
+  });
+
+  it("capacidade 0/ausente => Infinity (sem limite)", () => {
+    expect(capacidadeDisponivel(0, 500, [])).toBe(Infinity);
+  });
+
+  it("nunca fica negativa (tanque já estourado)", () => {
+    const itens = [item({ kind: "reabastecimento", payload: { receivedLiters: 200 } })];
+    expect(capacidadeDisponivel(1000, 900, itens)).toBe(0);
+  });
+
+  it("ignora itens em erro no desconto", () => {
+    const itens = [
+      item({ kind: "reabastecimento", failed: true, payload: { receivedLiters: 999 } }),
+    ];
+    expect(capacidadeDisponivel(1000, 400, itens)).toBe(600);
   });
 });

@@ -25,6 +25,8 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
+import { saldoOtimista } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
 import {
@@ -77,15 +79,16 @@ export function FuelFormScreen() {
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
-  // Saldo conhecido do comboio selecionado (cache) — para o aviso antecipado.
+  // Saldo OTIMISTA do comboio (cache do servidor − fila pendente). Usado para
+  // travar: vários abastecimentos offline seguidos já contam uns com os outros.
+  const raw = useOutboxRaw();
   const comboioSel = comboios.find((c) => c.id === comboioId);
-  const saldoCache = comboioSel?.tank.currentVolume ?? null;
+  const saldoOtim = comboioSel
+    ? saldoOtimista(comboioSel.tank.currentVolume, raw)
+    : null;
   const litrosNum = Number(liters);
   const semSaldo =
-    !postoId &&
-    saldoCache !== null &&
-    litrosNum > 0 &&
-    litrosNum > saldoCache;
+    !postoId && saldoOtim !== null && litrosNum > 0 && litrosNum > saldoOtim;
 
   useEffect(() => {
     const u = getSessionUser();
@@ -142,6 +145,12 @@ export function FuelFormScreen() {
     }
     if (!(litrosNum > 0)) {
       setErro("Informe os litros abastecidos.");
+      return;
+    }
+    if (semSaldo) {
+      setErro(
+        `Acima do saldo do comboio (${saldoOtim?.toLocaleString("pt-BR")} L disponíveis). Reduza os litros.`,
+      );
       return;
     }
     if (!Number.isFinite(leituraNum)) {
@@ -258,8 +267,8 @@ export function FuelFormScreen() {
           {semSaldo ? (
             <p className="flex items-start gap-1.5 text-xs text-amber-500">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Acima do saldo do comboio ({saldoCache?.toLocaleString("pt-BR")} L).
-              O lançamento pode ser recusado.
+              Acima do saldo do comboio ({saldoOtim?.toLocaleString("pt-BR")} L
+              disponíveis). Reduza os litros.
             </p>
           ) : null}
         </div>
@@ -344,7 +353,7 @@ export function FuelFormScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving}
+            disabled={isSaving || semSaldo}
           >
             {isSaving ? "Salvando…" : "Salvar abastecimento"}
           </Button>

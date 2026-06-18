@@ -65,3 +65,29 @@ export function saldoPendenteDelta(itens: OutboxItem[]): number {
   }
   return delta;
 }
+
+/**
+ * Saldo otimista do tanque: o saldo do servidor mais o delta da fila ainda não
+ * sincronizada. Nunca negativo. É o que as telas devem usar para limitar — assim
+ * vários lançamentos offline seguidos já contam uns com os outros.
+ */
+export function saldoOtimista(
+  currentVolume: number,
+  itens: OutboxItem[],
+): number {
+  return Math.max(0, num(currentVolume) + saldoPendenteDelta(itens));
+}
+
+/**
+ * Quanto ainda cabe no tanque: capacidade − saldo otimista (nunca negativo).
+ * Capacidade ausente/0 ⇒ `Infinity` (sem limite configurado), espelhando o back.
+ */
+export function capacidadeDisponivel(
+  capacity: number,
+  currentVolume: number,
+  itens: OutboxItem[],
+): number {
+  const cap = num(capacity);
+  if (cap <= 0) return Infinity;
+  return Math.max(0, cap - saldoOtimista(currentVolume, itens));
+}

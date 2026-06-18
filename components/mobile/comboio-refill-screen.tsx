@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wifi } from "lucide-react";
+import { TriangleAlert, Wifi } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { FormFieldLabel } from "@/components/mobile/form-field-label";
@@ -24,6 +24,8 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { useComboios } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
+import { capacidadeDisponivel } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { setFlash } from "@/lib/flash";
 import {
   getComboioSelecionado,
@@ -47,6 +49,21 @@ export function ComboioRefillScreen() {
   const { data } = useComboios(user?.prefeituraId, user?.funcionarioId);
   const comboios = useMemo(() => data ?? [], [data]);
   const nome = user?.nome ?? "";
+
+  // Quanto ainda cabe no tanque (capacidade − saldo otimista). Capacidade
+  // ausente/0 ⇒ Infinity (sem limite) — não trava comboio sem capacidadeTanque.
+  const raw = useOutboxRaw();
+  const comboioSel = comboios.find((c) => c.id === comboioId) ?? null;
+  const litrosNum = Number(liters);
+  const cabe = comboioSel
+    ? capacidadeDisponivel(
+        comboioSel.tank.capacity,
+        comboioSel.tank.currentVolume,
+        raw,
+      )
+    : Infinity;
+  const temLimite = Number.isFinite(cabe);
+  const estouraCapacidade = temLimite && litrosNum > 0 && litrosNum > cabe;
 
   useEffect(() => {
     const u = getSessionUser();
@@ -83,13 +100,18 @@ export function ComboioRefillScreen() {
     setErro("");
     setSucesso("");
 
-    const litrosNum = Number(liters);
     if (!comboioId) {
       setErro("Selecione o comboio que está reabastecendo.");
       return;
     }
     if (!(litrosNum > 0)) {
       setErro("Informe os litros recebidos.");
+      return;
+    }
+    if (estouraCapacidade) {
+      setErro(
+        `Acima da capacidade do tanque. Cabe no máximo ${cabe.toLocaleString("pt-BR")} L.`,
+      );
       return;
     }
 
@@ -187,6 +209,22 @@ export function ComboioRefillScreen() {
             onChange={(e) => setLiters(e.target.value)}
             required
           />
+          {temLimite ? (
+            estouraCapacidade ? (
+              <p className="flex items-start gap-1.5 text-xs text-amber-500">
+                <TriangleAlert
+                  className="mt-0.5 size-3.5 shrink-0"
+                  aria-hidden
+                />
+                Acima da capacidade do tanque. Cabe no máximo{" "}
+                {cabe.toLocaleString("pt-BR")} L.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Cabe no máximo {cabe.toLocaleString("pt-BR")} L.
+              </p>
+            )
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -217,7 +255,7 @@ export function ComboioRefillScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving}
+            disabled={isSaving || estouraCapacidade}
           >
             {isSaving ? "Salvando…" : "Salvar carga"}
           </Button>

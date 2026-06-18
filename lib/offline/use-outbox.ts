@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   flushOutbox,
@@ -12,6 +12,7 @@ import {
   type OutboxCounts,
   type OutboxItem,
 } from "./outbox";
+import { saldoOtimista } from "./pendentes";
 
 const VAZIO: OutboxCounts = { pendentes: 0, falhos: 0 };
 
@@ -107,6 +108,15 @@ export function useOutboxRaw(): OutboxItem[] {
   }, []);
 
   return items;
+}
+
+/**
+ * Saldo otimista do tanque (servidor + fila pendente), reativo. Use para mostrar
+ * o saldo "na hora" e para limitar os lançamentos antes da sincronização.
+ */
+export function useSaldoOtimista(currentVolume: number): number {
+  const raw = useOutboxRaw();
+  return useMemo(() => saldoOtimista(currentVolume, raw), [currentVolume, raw]);
 }
 
 /**
