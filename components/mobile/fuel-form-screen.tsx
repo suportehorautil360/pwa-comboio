@@ -23,10 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { ultimaLeituraAbastecimento } from "@/lib/api/abastecimento";
 import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
 import { revalidarFrota } from "@/lib/data/sync";
 import { submit } from "@/lib/offline/outbox";
-import { saldoOtimista } from "@/lib/offline/pendentes";
+import {
+  maiorLeituraPendente,
+  saldoOtimista,
+} from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
@@ -82,6 +86,8 @@ export function FuelFormScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
+  // Maior leitura já registrada p/ o equipamento (busca no back ao escolher).
+  const [ultimaLeitura, setUltimaLeitura] = useState<number | null>(null);
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
@@ -106,6 +112,21 @@ export function FuelFormScreen() {
   );
   const capEquip = equipSel?.capacidadeTanque ?? 0;
   const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
+
+  // Leitura (horímetro/km) não pode ser igual/menor que a última do equipamento.
+  // Referência = a maior entre a última do servidor (busca online) e a maior já
+  // lançada na fila offline (a própria sequência do operador, sem rede).
+  const leituraNum = Number(reading);
+  const leituraPendente = maiorLeituraPendente(raw, equipment, measurement);
+  const ultimaRef =
+    ultimaLeitura !== null || leituraPendente !== null
+      ? Math.max(ultimaLeitura ?? 0, leituraPendente ?? 0)
+      : null;
+  const leituraInvalida =
+    ultimaRef !== null &&
+    Number.isFinite(leituraNum) &&
+    leituraNum > 0 &&
+    leituraNum <= ultimaRef;
 
   useEffect(() => {
     const u = getSessionUser();
@@ -145,6 +166,36 @@ export function FuelFormScreen() {
     );
   }, [comboiosData]);
 
+  // Busca a última leitura do equipamento (debounce) p/ travar leitura repetida/
+  // menor. Só online; offline não bloqueia aqui (o back recusa na sincronização).
+  useEffect(() => {
+    const placa = equipment.trim();
+    const pid = user?.prefeituraId;
+    const online = typeof navigator === "undefined" || navigator.onLine;
+    let ativo = true;
+    if (!pid || placa.length < 2 || !online) {
+      queueMicrotask(() => {
+        if (ativo) setUltimaLeitura(null);
+      });
+      return () => {
+        ativo = false;
+      };
+    }
+    const t = setTimeout(() => {
+      void ultimaLeituraAbastecimento(pid, placa, measurement)
+        .then((v) => {
+          if (ativo) setUltimaLeitura(v);
+        })
+        .catch(() => {
+          if (ativo) setUltimaLeitura(null);
+        });
+    }, 400);
+    return () => {
+      ativo = false;
+      clearTimeout(t);
+    };
+  }, [equipment, measurement, user?.prefeituraId]);
+
   function trocarComboio(id: string) {
     setComboioId(id);
     setComboioSelecionado(id);
@@ -155,7 +206,6 @@ export function FuelFormScreen() {
     setErro("");
     setSucesso("");
 
-    const leituraNum = Number(reading);
     if (!equipment.trim()) {
       setErro("Informe a placa ou chassi do equipamento.");
       return;
@@ -178,6 +228,12 @@ export function FuelFormScreen() {
     }
     if (!Number.isFinite(leituraNum)) {
       setErro("Informe a leitura atual.");
+      return;
+    }
+    if (leituraInvalida) {
+      setErro(
+        `A leitura deve ser maior que a última registrada (${ultimaRef?.toLocaleString("pt-BR")} ${readingUnit}).`,
+      );
       return;
     }
 
@@ -328,6 +384,18 @@ export function FuelFormScreen() {
             onChange={(e) => setReading(e.target.value)}
             required
           />
+          {leituraInvalida ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              A leitura deve ser maior que a última registrada (
+              {ultimaRef?.toLocaleString("pt-BR")} {readingUnit}).
+            </p>
+          ) : ultimaRef !== null ? (
+            <p className="text-xs text-muted-foreground">
+              Última registrada: {ultimaRef.toLocaleString("pt-BR")}{" "}
+              {readingUnit}.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -386,7 +454,7 @@ export function FuelFormScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving || semSaldo || acimaCapacidade}
+            disabled={isSaving || semSaldo || acimaCapacidade || leituraInvalida}
           >
             {isSaving ? "Salvando…" : "Salvar abastecimento"}
           </Button>
