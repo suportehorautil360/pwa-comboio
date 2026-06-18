@@ -15,8 +15,7 @@ import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { type TanqueComboio } from "@/lib/api/dashboard";
 import { useComboios, useUltimosLancamentos } from "@/lib/data/queries";
-import { saldoPendenteDelta } from "@/lib/offline/pendentes";
-import { useOutboxItems, useOutboxRaw } from "@/lib/offline/use-outbox";
+import { useOutboxItems, useSaldoOtimista } from "@/lib/offline/use-outbox";
 import {
   getComboioSelecionado,
   getSessionUser,
@@ -60,9 +59,7 @@ export function FieldHomeScreen() {
 
   // Otimismo de UI: desconta/soma os lançamentos ainda na fila no saldo exibido
   // (atribuídos ao comboio do turno — o front não guarda comboioId por item).
-  const raw = useOutboxRaw();
-  const saldoDelta = useMemo(() => saldoPendenteDelta(raw), [raw]);
-  const saldoLocal = Math.max(0, (tank?.currentVolume ?? 0) + saldoDelta);
+  const saldoLocal = useSaldoOtimista(tank?.currentVolume ?? 0);
 
   useEffect(() => {
     const u = getSessionUser();
