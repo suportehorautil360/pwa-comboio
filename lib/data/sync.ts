@@ -106,6 +106,44 @@ const RESOURCES: Resource[] = [
   },
 ];
 
+/**
+ * Revalida AGORA (ignorando o TTL) só os recursos que um lançamento de frota
+ * muda: o saldo dos comboios e os últimos lançamentos. Chame logo após um
+ * abastecimento/reabastecimento — senão o `syncAll` normal respeita o TTL de
+ * 5 min do comboios e o dashboard fica mostrando o saldo velho (e o bloqueio de
+ * limite calcularia em cima dele). Não toca nos outros recursos nem no roster
+ * (dado sensível). Best-effort: offline/erro mantém o cache anterior, não lança.
+ */
+export async function revalidarFrota(user: SessionUser | null): Promise<void> {
+  if (!user) return;
+  const online = typeof navigator === "undefined" || navigator.onLine;
+  if (!online) return;
+
+  const alvos: Array<{ key: string | null; fetch: () => Promise<unknown> }> = [
+    {
+      key: cacheKeys.comboios(user.prefeituraId, user.funcionarioId),
+      fetch: () =>
+        listarComboiosDoMotorista(user.prefeituraId, user.funcionarioId!),
+    },
+    {
+      key: cacheKeys.ultimos(user.prefeituraId),
+      fetch: () => getUltimosLancamentos(user.prefeituraId),
+    },
+  ];
+
+  await Promise.all(
+    alvos.map(async ({ key, fetch }) => {
+      if (!key) return;
+      try {
+        // cachePut notifica os assinantes → o dashboard montado re-lê na hora.
+        await cachePut(key, await fetch());
+      } catch {
+        /* offline/erro: mantém o cache anterior */
+      }
+    }),
+  );
+}
+
 let sincronizando = false;
 
 /**
