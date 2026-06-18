@@ -4,6 +4,11 @@ import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // O @serwist/next injeta uma config `webpack`. No Next 16 o `next dev` roda
+  // Turbopack por padrão e ABORTA quando vê webpack sem turbopack. Este marcador
+  // vazio diz "Turbopack é intencional no dev" e silencia o erro. O SW continua
+  // sendo gerado só no build (`next build --webpack`); o dev não precisa dele.
+  turbopack: {},
   async headers() {
     return [
       {
