@@ -6,6 +6,7 @@ import type { OutboxItem } from "../db";
 import {
   batidasPendentes,
   capacidadeDisponivel,
+  maiorLeituraPendente,
   mesclarBatidas,
   saldoOtimista,
   saldoPendenteDelta,
@@ -149,5 +150,51 @@ describe("capacidadeDisponivel", () => {
       item({ kind: "reabastecimento", failed: true, payload: { receivedLiters: 999 } }),
     ];
     expect(capacidadeDisponivel(1000, 400, itens)).toBe(600);
+  });
+});
+
+describe("maiorLeituraPendente", () => {
+  const itens = [
+    item({
+      kind: "abastecimento",
+      payload: { plateOrChassis: "ABC-1234", measurementType: "hodometro", currentReading: 55000 },
+    }),
+    item({
+      kind: "abastecimento",
+      payload: { plateOrChassis: "ABC1234", measurementType: "hodometro", currentReading: 56000 },
+    }),
+    // outro equipamento
+    item({
+      kind: "abastecimento",
+      payload: { plateOrChassis: "XYZ-0000", measurementType: "hodometro", currentReading: 99999 },
+    }),
+    // outro tipo de medição
+    item({
+      kind: "abastecimento",
+      payload: { plateOrChassis: "ABC-1234", measurementType: "horimetro", currentReading: 70000 },
+    }),
+  ];
+
+  it("pega a maior leitura pendente do mesmo equipamento e tipo (placa normalizada)", () => {
+    expect(maiorLeituraPendente(itens, "abc1234", "hodometro")).toBe(56000);
+  });
+
+  it("não mistura tipo de medição", () => {
+    expect(maiorLeituraPendente(itens, "ABC-1234", "horimetro")).toBe(70000);
+  });
+
+  it("equipamento sem pendência => null", () => {
+    expect(maiorLeituraPendente(itens, "PLACA-NOVA", "hodometro")).toBeNull();
+  });
+
+  it("ignora itens em erro", () => {
+    const erro = [
+      item({
+        kind: "abastecimento",
+        failed: true,
+        payload: { plateOrChassis: "ABC-1234", measurementType: "hodometro", currentReading: 99999 },
+      }),
+    ];
+    expect(maiorLeituraPendente(erro, "ABC-1234", "hodometro")).toBeNull();
   });
 });

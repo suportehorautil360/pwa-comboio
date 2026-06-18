@@ -91,3 +91,35 @@ export function capacidadeDisponivel(
   if (cap <= 0) return Infinity;
   return Math.max(0, cap - saldoOtimista(currentVolume, itens));
 }
+
+/** Normaliza placa/chassi (só letras/números, maiúsculas) para comparar. */
+function alnum(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/**
+ * Maior leitura (horímetro/km) já lançada OFFLINE para o equipamento que ainda
+ * está na fila — para travar a próxima leitura sem rede (a sequência do próprio
+ * operador). Casa placa/chassi normalizado + mesmo tipo de medição. `null` se não
+ * há nenhuma pendente. (O baseline do servidor vem da busca online; aqui é só a
+ * fila local.)
+ */
+export function maiorLeituraPendente(
+  itens: OutboxItem[],
+  plateOrChassis: string,
+  measurementType: string,
+): number | null {
+  const alvo = alnum(plateOrChassis);
+  if (!alvo) return null;
+  let max: number | null = null;
+  for (const i of itens) {
+    if (i.failed || i.kind !== "abastecimento") continue;
+    const p = (i.payload ?? {}) as Record<string, unknown>;
+    if (str(p.measurementType) !== measurementType) continue;
+    if (alnum(str(p.plateOrChassis)) !== alvo) continue;
+    const n = Number(p.currentReading);
+    if (!Number.isFinite(n)) continue;
+    if (max === null || n > max) max = n;
+  }
+  return max;
+}

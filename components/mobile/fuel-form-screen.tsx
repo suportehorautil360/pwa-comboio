@@ -27,7 +27,10 @@ import { ultimaLeituraAbastecimento } from "@/lib/api/abastecimento";
 import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
 import { revalidarFrota } from "@/lib/data/sync";
 import { submit } from "@/lib/offline/outbox";
-import { saldoOtimista } from "@/lib/offline/pendentes";
+import {
+  maiorLeituraPendente,
+  saldoOtimista,
+} from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { ApiError } from "@/lib/api/client";
 import { setFlash } from "@/lib/flash";
@@ -111,12 +114,19 @@ export function FuelFormScreen() {
   const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
 
   // Leitura (horímetro/km) não pode ser igual/menor que a última do equipamento.
+  // Referência = a maior entre a última do servidor (busca online) e a maior já
+  // lançada na fila offline (a própria sequência do operador, sem rede).
   const leituraNum = Number(reading);
+  const leituraPendente = maiorLeituraPendente(raw, equipment, measurement);
+  const ultimaRef =
+    ultimaLeitura !== null || leituraPendente !== null
+      ? Math.max(ultimaLeitura ?? 0, leituraPendente ?? 0)
+      : null;
   const leituraInvalida =
-    ultimaLeitura !== null &&
+    ultimaRef !== null &&
     Number.isFinite(leituraNum) &&
     leituraNum > 0 &&
-    leituraNum <= ultimaLeitura;
+    leituraNum <= ultimaRef;
 
   useEffect(() => {
     const u = getSessionUser();
@@ -222,7 +232,7 @@ export function FuelFormScreen() {
     }
     if (leituraInvalida) {
       setErro(
-        `A leitura deve ser maior que a última registrada (${ultimaLeitura?.toLocaleString("pt-BR")} ${readingUnit}).`,
+        `A leitura deve ser maior que a última registrada (${ultimaRef?.toLocaleString("pt-BR")} ${readingUnit}).`,
       );
       return;
     }
@@ -378,11 +388,11 @@ export function FuelFormScreen() {
             <p className="flex items-start gap-1.5 text-xs text-amber-500">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               A leitura deve ser maior que a última registrada (
-              {ultimaLeitura?.toLocaleString("pt-BR")} {readingUnit}).
+              {ultimaRef?.toLocaleString("pt-BR")} {readingUnit}).
             </p>
-          ) : ultimaLeitura !== null ? (
+          ) : ultimaRef !== null ? (
             <p className="text-xs text-muted-foreground">
-              Última registrada: {ultimaLeitura.toLocaleString("pt-BR")}{" "}
+              Última registrada: {ultimaRef.toLocaleString("pt-BR")}{" "}
               {readingUnit}.
             </p>
           ) : null}
