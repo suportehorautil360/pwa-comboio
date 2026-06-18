@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/reabastecimento";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { useComboios } from "@/lib/data/queries";
+import { revalidarFrota } from "@/lib/data/sync";
 import { submit } from "@/lib/offline/outbox";
 import { capacidadeDisponivel } from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
@@ -131,6 +132,9 @@ export function ComboioRefillScreen() {
         receivedLiters: litrosNum,
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
+      // Revalida o saldo do comboio (ignora o TTL) pro dashboard refletir a nova
+      // carga na hora — o syncAll normal pularia por achar o cache fresco.
+      void revalidarFrota(user);
       // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
       setFlash(
         synced

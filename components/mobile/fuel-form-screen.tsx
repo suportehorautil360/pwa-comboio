@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
+import { revalidarFrota } from "@/lib/data/sync";
 import { submit } from "@/lib/offline/outbox";
 import { saldoOtimista } from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
@@ -186,6 +187,9 @@ export function FuelFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
+      // Revalida o saldo do comboio (ignora o TTL) pro dashboard refletir o novo
+      // saldo na hora — o syncAll normal pularia por achar o cache fresco.
+      void revalidarFrota(user);
       // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
       setFlash(
         synced
