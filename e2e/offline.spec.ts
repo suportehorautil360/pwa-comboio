@@ -35,6 +35,8 @@ async function seedSession(page: Page): Promise<void> {
       perfil: "comboista",
       vinculo: "comboio",
       prefeituraId: "pref-e2e",
+      // funcionarioId evita o redirect p/ "/" das telas que o exigem (abastecer etc.).
+      funcionarioId: "func-e2e",
     };
     localStorage.setItem("hu360_token", "e2e-token");
     localStorage.setItem("hu360_user", JSON.stringify(user));
@@ -42,8 +44,9 @@ async function seedSession(page: Page): Promise<void> {
       "hu360_trusted_until",
       String(Date.now() + 7 * 24 * 60 * 60 * 1000),
     );
+    // chave do ponto = funcionarioId (identidade preferida em ponto-dia).
     const today = new Date().toISOString().slice(0, 10);
-    localStorage.setItem(`hu360-ponto:${today}:e2e`, "1");
+    localStorage.setItem(`hu360-ponto:${today}:func-e2e`, "1");
   });
 }
 
