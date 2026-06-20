@@ -7,8 +7,10 @@ export const metadata = {
 };
 
 /**
- * Fallback de navegação quando a rota ainda não foi visitada e não há rede.
- * Pré-cacheada pelo Serwist (additionalPrecacheEntries em next.config).
+ * Fallback de navegação de último recurso (rota desconhecida ou SW ainda
+ * instalando). As telas do app têm o documento pré-cacheado e abrem offline
+ * normalmente — esta página raramente aparece. Pré-cacheada pelo Serwist
+ * (additionalPrecacheEntries em next.config).
  */
 export default function OfflinePage() {
   return (
@@ -17,11 +19,11 @@ export default function OfflinePage() {
         <WifiOff className="size-7 text-muted-foreground" aria-hidden />
       </div>
       <div className="space-y-1">
-        <h1 className="text-lg font-semibold tracking-tight">Você está offline</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Sem conexão</h1>
         <p className="max-w-xs text-sm text-muted-foreground">
-          Esta tela ainda não foi aberta com internet. Os lançamentos feitos
-          agora ficam salvos no aparelho e sincronizam sozinhos quando a conexão
-          voltar.
+          Não foi possível carregar esta tela agora. Tente de novo — os
+          lançamentos feitos no app ficam salvos no aparelho e sincronizam
+          sozinhos quando a internet voltar.
         </p>
       </div>
       <p className="text-xs text-muted-foreground/70">{brand.name}</p>
