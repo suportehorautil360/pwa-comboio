@@ -13,6 +13,10 @@ export interface EquipamentoApi {
   status?: string;
   /** Capacidade do tanque (L); 0/ausente = sem limite. */
   capacidadeTanque?: number;
+  /** KM/horímetro atual do equipamento — baseline da leitura (atualizado a cada abastecimento). */
+  medicaoAtual?: number;
+  /** Unidade da leitura do equipamento (km = hodômetro, h = horímetro). */
+  unidadeRevisao?: "km" | "h";
 }
 
 export interface PostoApi {
