@@ -29,6 +29,7 @@ describe("tetoAbastecimento", () => {
   it("0/ausente = sem limite (0)", () => {
     expect(tetoAbastecimento({ tipo: "Comboio", capacidadeTanqueCaminhao: 0 })).toBe(0);
     expect(tetoAbastecimento({ tipo: "Comboio" })).toBe(0);
+    expect(tetoAbastecimento({ tipo: "Caminhões", capacidadeTanque: 0 })).toBe(0);
     expect(tetoAbastecimento({ tipo: "Caminhões" })).toBe(0);
   });
 });
