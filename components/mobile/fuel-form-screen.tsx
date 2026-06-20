@@ -109,11 +109,16 @@ export function FuelFormScreen() {
   // Não abastecer além do que o tanque do EQUIPAMENTO comporta. Casa o que foi
   // digitado (placa/chassi normalizado) com o cadastro; capacidade 0/ausente ou
   // equipamento fora do cadastro = sem limite no front (o back é o gate final).
-  const equipSel = equipamentos.find(
-    (e) =>
-      alnum(e.placa ?? "") === alnum(equipment) ||
-      alnum(e.chassis ?? "") === alnum(equipment),
-  );
+  // Só casa com entrada não-vazia: alnum("") === "" casaria com qualquer
+  // equipamento sem placa/chassi e dispararia o alvo/aviso "logo de cara".
+  const equipNorm = alnum(equipment);
+  const equipSel = equipNorm
+    ? equipamentos.find(
+        (e) =>
+          alnum(e.placa ?? "") === equipNorm ||
+          alnum(e.chassis ?? "") === equipNorm,
+      )
+    : undefined;
   const alvoComboio = !!equipSel && ehComboioTipo(equipSel.tipo);
   const rotuloTanque = alvoComboio ? "tanque do caminhão" : "tanque do equipamento";
   const capEquip = equipSel ? tetoAbastecimento(equipSel) : 0;
