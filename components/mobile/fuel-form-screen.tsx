@@ -261,10 +261,15 @@ export function FuelFormScreen() {
       setErro("Selecione o comboio de onde sai o combustível.");
       return;
     }
+    // Foto do medidor é obrigatória (comprova a leitura registrada).
+    if (!photoFile) {
+      setErro("Tire a foto do medidor para registrar o abastecimento.");
+      return;
+    }
 
     setIsSaving(true);
     try {
-      const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
+      const meterPhoto = await fileToDataUrl(photoFile);
       const { synced } = await submit("abastecimento", {
         prefeituraId: pid,
         comboioId: comboioId || undefined,
@@ -433,7 +438,7 @@ export function FuelFormScreen() {
         </div>
 
         <div className="space-y-2">
-          <FormFieldLabel>Foto do medidor (opcional)</FormFieldLabel>
+          <FormFieldLabel required>Foto do medidor</FormFieldLabel>
           <PhotoUpload onSelect={setPhotoFile} />
           {photoFile ? (
             <p className="text-xs text-muted-foreground">
