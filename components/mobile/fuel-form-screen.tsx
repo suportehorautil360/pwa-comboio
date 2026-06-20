@@ -23,7 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
-import { ultimaLeituraAbastecimento } from "@/lib/api/abastecimento";
+import {
+  ehComboioTipo,
+  tetoAbastecimento,
+  ultimaLeituraAbastecimento,
+} from "@/lib/api/abastecimento";
 import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
 import { revalidarFrota } from "@/lib/data/sync";
 import { submit } from "@/lib/offline/outbox";
@@ -110,7 +114,9 @@ export function FuelFormScreen() {
       alnum(e.placa ?? "") === alnum(equipment) ||
       alnum(e.chassis ?? "") === alnum(equipment),
   );
-  const capEquip = equipSel?.capacidadeTanque ?? 0;
+  const alvoComboio = !!equipSel && ehComboioTipo(equipSel.tipo);
+  const rotuloTanque = alvoComboio ? "tanque do caminhão" : "tanque do equipamento";
+  const capEquip = equipSel ? tetoAbastecimento(equipSel) : 0;
   const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
 
   // Leitura (horímetro/km) não pode ser igual/menor que a última do equipamento.
@@ -235,7 +241,7 @@ export function FuelFormScreen() {
     }
     if (acimaCapacidade) {
       setErro(
-        `Acima da capacidade do tanque do equipamento (${capEquip.toLocaleString("pt-BR")} L). Reduza os litros.`,
+        `Acima da capacidade do ${rotuloTanque} (${capEquip.toLocaleString("pt-BR")} L). Reduza os litros.`,
       );
       return;
     }
@@ -345,6 +351,11 @@ export function FuelFormScreen() {
               ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`
               : "Digite a placa ou chassi do equipamento."}
           </p>
+          {alvoComboio ? (
+            <p className="text-xs font-medium text-brand">
+              Abastecendo o tanque do caminhão do comboio.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -374,7 +385,7 @@ export function FuelFormScreen() {
           {acimaCapacidade ? (
             <p className="flex items-start gap-1.5 text-xs text-amber-500">
               <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Acima da capacidade do tanque do equipamento (
+              Acima da capacidade do {rotuloTanque} (
               {capEquip.toLocaleString("pt-BR")} L). Reduza os litros.
             </p>
           ) : null}
