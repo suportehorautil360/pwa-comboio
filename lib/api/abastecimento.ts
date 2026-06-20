@@ -13,6 +13,8 @@ export interface EquipamentoApi {
   status?: string;
   /** Capacidade do tanque (L); 0/ausente = sem limite. */
   capacidadeTanque?: number;
+  /** Capacidade do tanque do próprio caminhão (L) — só p/ comboio; 0/ausente = sem limite. */
+  capacidadeTanqueCaminhao?: number;
   /** KM/horímetro atual do equipamento — baseline da leitura (atualizado a cada abastecimento). */
   medicaoAtual?: number;
   /** Unidade da leitura do equipamento (km = hodômetro, h = horímetro). */
@@ -58,6 +60,29 @@ export async function criarAbastecimento(
   payload: CriarAbastecimentoPayload,
 ): Promise<void> {
   await api.post("/abastecimentos", payload);
+}
+
+/** Comboio? (case-insensitive, igual ao back/360). */
+export function ehComboioTipo(tipo?: string): boolean {
+  return (tipo ?? "").trim().toLowerCase() === "comboio";
+}
+
+/**
+ * Teto de litros (capacidade do tanque-alvo) ao abastecer um equipamento:
+ * comboio → capacidadeTanqueCaminhao; demais → capacidadeTanque.
+ * 0/ausente/inválida = 0 (sem limite).
+ */
+export function tetoAbastecimento(
+  equip: Pick<
+    EquipamentoApi,
+    "tipo" | "capacidadeTanque" | "capacidadeTanqueCaminhao"
+  >,
+): number {
+  const campo = ehComboioTipo(equip.tipo)
+    ? equip.capacidadeTanqueCaminhao
+    : equip.capacidadeTanque;
+  const n = Number(campo);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /**
