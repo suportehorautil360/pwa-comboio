@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Wifi } from "lucide-react";
+import { MapPin, TriangleAlert, Wifi } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { FormFieldLabel } from "@/components/mobile/form-field-label";
@@ -13,8 +13,8 @@ import {
 } from "@/components/mobile/measurement-toggle";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -22,14 +22,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { ultimaLeituraAbastecimento } from "@/lib/api/abastecimento";
+import { useComboios, useEquipamentos, usePostos } from "@/lib/data/queries";
+import { revalidarFrota } from "@/lib/data/sync";
+import { submit } from "@/lib/offline/outbox";
 import {
-  listarEquipamentos,
-  listarPostos,
-  type EquipamentoApi,
-  type PostoApi,
-} from "@/lib/api/abastecimento";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
-import { getSessionUser } from "@/lib/session";
+  maiorLeituraPendente,
+  saldoOtimista,
+} from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
+import { ApiError } from "@/lib/api/client";
+import { setFlash } from "@/lib/flash";
+import {
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+  type SessionUser,
+} from "@/lib/session";
+
+/** Normaliza placa/chassi para comparar (só letras/números, maiúsculas). */
+function alnum(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -42,9 +57,20 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export function FuelFormScreen() {
   const router = useRouter();
-  const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
-  const [postos, setPostos] = useState<PostoApi[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
 
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data: equipData } = useEquipamentos(user?.prefeituraId);
+  const { data: postosData } = usePostos(user?.prefeituraId);
+  const { data: comboiosData } = useComboios(
+    user?.prefeituraId,
+    user?.funcionarioId,
+  );
+  const equipamentos = equipData ?? [];
+  const postos = postosData ?? [];
+  const comboios = comboiosData ?? [];
+
+  const [comboioId, setComboioId] = useState("");
   const [equipment, setEquipment] = useState("");
   const [liters, setLiters] = useState("");
   const [measurement, setMeasurement] = useState<MeasurementType>("horimetro");
@@ -60,22 +86,68 @@ export function FuelFormScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
+  // Maior leitura já registrada p/ o equipamento (busca no back ao escolher).
+  const [ultimaLeitura, setUltimaLeitura] = useState<number | null>(null);
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
+  // Saldo OTIMISTA do comboio (cache do servidor − fila pendente). Usado para
+  // travar: vários abastecimentos offline seguidos já contam uns com os outros.
+  const raw = useOutboxRaw();
+  const comboioSel = comboios.find((c) => c.id === comboioId);
+  const saldoOtim = comboioSel
+    ? saldoOtimista(comboioSel.tank.currentVolume, raw)
+    : null;
+  const litrosNum = Number(liters);
+  const semSaldo =
+    !postoId && saldoOtim !== null && litrosNum > 0 && litrosNum > saldoOtim;
+
+  // Não abastecer além do que o tanque do EQUIPAMENTO comporta. Casa o que foi
+  // digitado (placa/chassi normalizado) com o cadastro; capacidade 0/ausente ou
+  // equipamento fora do cadastro = sem limite no front (o back é o gate final).
+  const equipSel = equipamentos.find(
+    (e) =>
+      alnum(e.placa ?? "") === alnum(equipment) ||
+      alnum(e.chassis ?? "") === alnum(equipment),
+  );
+  const capEquip = equipSel?.capacidadeTanque ?? 0;
+  const acimaCapacidade = capEquip > 0 && litrosNum > 0 && litrosNum > capEquip;
+
+  // Leitura (horímetro/km) não pode ser igual/menor que a última do equipamento.
+  // Referência = a MAIOR entre três fontes: a última do servidor (busca online),
+  // a maior já lançada na fila offline (sequência do próprio operador) e a
+  // medicaoAtual do equipamento no cache (baseline offline mesmo no 1º lançamento,
+  // só quando a unidade bate: km↔hodômetro, h↔horímetro).
+  const leituraNum = Number(reading);
+  const leituraPendente = maiorLeituraPendente(raw, equipment, measurement);
+  const unidadeBate =
+    (measurement === "hodometro" && equipSel?.unidadeRevisao === "km") ||
+    (measurement === "horimetro" && equipSel?.unidadeRevisao === "h");
+  const equipLeitura =
+    unidadeBate && typeof equipSel?.medicaoAtual === "number"
+      ? equipSel.medicaoAtual
+      : null;
+  const candidatosLeitura = [
+    ultimaLeitura,
+    leituraPendente,
+    equipLeitura,
+  ].filter((v): v is number => typeof v === "number");
+  const ultimaRef = candidatosLeitura.length
+    ? Math.max(...candidatosLeitura)
+    : null;
+  const leituraInvalida =
+    ultimaRef !== null &&
+    Number.isFinite(leituraNum) &&
+    leituraNum > 0 &&
+    leituraNum <= ultimaRef;
+
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    void listarEquipamentos(pid)
-      .then(setEquipamentos)
-      .catch(() => setEquipamentos([]));
-    void listarPostos(pid)
-      .then(setPostos)
-      .catch(() => setPostos([]));
+    queueMicrotask(() => setUser(u));
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));
@@ -91,13 +163,62 @@ export function FuelFormScreen() {
     );
   }, [router]);
 
+  // Seleciona o comboio assim que a lista (cache ou rede) chega.
+  useEffect(() => {
+    if (!comboiosData) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboiosData.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboiosData.some((c) => c.id === salvo) && salvo) ||
+          comboiosData[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboiosData]);
+
+  // Busca a última leitura do equipamento (debounce) p/ travar leitura repetida/
+  // menor. Só online; offline não bloqueia aqui (o back recusa na sincronização).
+  useEffect(() => {
+    const placa = equipment.trim();
+    const pid = user?.prefeituraId;
+    const online = typeof navigator === "undefined" || navigator.onLine;
+    let ativo = true;
+    if (!pid || placa.length < 2 || !online) {
+      queueMicrotask(() => {
+        if (ativo) setUltimaLeitura(null);
+      });
+      return () => {
+        ativo = false;
+      };
+    }
+    const t = setTimeout(() => {
+      void ultimaLeituraAbastecimento(pid, placa, measurement)
+        .then((v) => {
+          if (ativo) setUltimaLeitura(v);
+        })
+        .catch(() => {
+          if (ativo) setUltimaLeitura(null);
+        });
+    }, 400);
+    return () => {
+      ativo = false;
+      clearTimeout(t);
+    };
+  }, [equipment, measurement, user?.prefeituraId]);
+
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErro("");
     setSucesso("");
 
-    const litrosNum = Number(liters);
-    const leituraNum = Number(reading);
     if (!equipment.trim()) {
       setErro("Informe a placa ou chassi do equipamento.");
       return;
@@ -106,22 +227,48 @@ export function FuelFormScreen() {
       setErro("Informe os litros abastecidos.");
       return;
     }
+    if (semSaldo) {
+      setErro(
+        `Acima do saldo do comboio (${saldoOtim?.toLocaleString("pt-BR")} L disponíveis). Reduza os litros.`,
+      );
+      return;
+    }
+    if (acimaCapacidade) {
+      setErro(
+        `Acima da capacidade do tanque do equipamento (${capEquip.toLocaleString("pt-BR")} L). Reduza os litros.`,
+      );
+      return;
+    }
     if (!Number.isFinite(leituraNum)) {
       setErro("Informe a leitura atual.");
       return;
     }
+    if (leituraInvalida) {
+      setErro(
+        `A leitura deve ser maior que a última registrada (${ultimaRef?.toLocaleString("pt-BR")} ${readingUnit}).`,
+      );
+      return;
+    }
 
-    const pid = getSessionUser()?.prefeituraId ?? "";
+    const user = getSessionUser();
+    const pid = user?.prefeituraId ?? "";
     if (!pid) {
       setErro("Sessão expirada. Faça login novamente.");
+      return;
+    }
+    // Sem posto, o combustível sai do comboio: precisa saber qual.
+    if (!postoId && !comboioId) {
+      setErro("Selecione o comboio de onde sai o combustível.");
       return;
     }
 
     setIsSaving(true);
     try {
       const meterPhoto = photoFile ? await fileToDataUrl(photoFile) : undefined;
-      await enqueue("abastecimento", {
+      const { synced } = await submit("abastecimento", {
         prefeituraId: pid,
+        comboioId: comboioId || undefined,
+        funcionarioId: user?.funcionarioId,
         plateOrChassis: equipment.trim().toUpperCase(),
         liters: litrosNum,
         measurementType: measurement,
@@ -131,15 +278,23 @@ export function FuelFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
-      setEquipment("");
-      setLiters("");
-      setReading("");
-      setPostoId("");
-      setPhotoFile(null);
+      // Revalida o saldo do comboio (ignora o TTL) pro dashboard refletir o novo
+      // saldo na hora — o syncAll normal pularia por achar o cache fresco.
+      void revalidarFrota(user);
+      // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      setFlash(
+        synced
+          ? "Abastecimento registrado"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
+      router.replace("/dashboard");
+      return;
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      if (e instanceof ApiError && e.status === 404) {
+        setErro("Equipamento não encontrado. Confira a placa ou o chassi.");
+      } else {
+        setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -153,30 +308,33 @@ export function FuelFormScreen() {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
+          <FormFieldLabel htmlFor="comboio" required>
+            Comboio (origem do combustível)
+          </FormFieldLabel>
+          <ComboioSelect
+            id="comboio"
+            comboios={comboios}
+            value={comboioId}
+            onChange={trocarComboio}
+            disabled={comboios.length === 0}
+            placeholder={
+              comboios.length
+                ? "Selecione o comboio"
+                : "Nenhum comboio disponível"
+            }
+          />
+        </div>
+
+        <div className="space-y-2">
           <FormFieldLabel htmlFor="equipment" required>
             Placa ou chassi do equipamento
           </FormFieldLabel>
-          <Input
+          <EquipamentoAutocomplete
             id="equipment"
-            name="equipment"
-            list="equip-list"
-            placeholder="Ex: ABC-1234"
-            className="h-11 uppercase md:text-base"
+            equipamentos={equipamentos}
             value={equipment}
-            onChange={(e) => setEquipment(e.target.value)}
-            required
+            onChange={setEquipment}
           />
-          <datalist id="equip-list">
-            {equipamentos.map((eq) => {
-              const valor = eq.placa || eq.chassis || "";
-              if (!valor) return null;
-              return (
-                <option key={eq.id} value={valor}>
-                  {eq.descricao ?? eq.modelo ?? valor}
-                </option>
-              );
-            })}
-          </datalist>
           <p className="text-xs leading-relaxed text-muted-foreground">
             {equipamentos.length > 0
               ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`
@@ -201,6 +359,20 @@ export function FuelFormScreen() {
             onChange={(e) => setLiters(e.target.value)}
             required
           />
+          {semSaldo ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Acima do saldo do comboio ({saldoOtim?.toLocaleString("pt-BR")} L
+              disponíveis). Reduza os litros.
+            </p>
+          ) : null}
+          {acimaCapacidade ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Acima da capacidade do tanque do equipamento (
+              {capEquip.toLocaleString("pt-BR")} L). Reduza os litros.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -225,6 +397,18 @@ export function FuelFormScreen() {
             onChange={(e) => setReading(e.target.value)}
             required
           />
+          {leituraInvalida ? (
+            <p className="flex items-start gap-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              A leitura deve ser maior que a última registrada (
+              {ultimaRef?.toLocaleString("pt-BR")} {readingUnit}).
+            </p>
+          ) : ultimaRef !== null ? (
+            <p className="text-xs text-muted-foreground">
+              Última registrada: {ultimaRef.toLocaleString("pt-BR")}{" "}
+              {readingUnit}.
+            </p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -283,13 +467,13 @@ export function FuelFormScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving}
+            disabled={isSaving || semSaldo || acimaCapacidade || leituraInvalida}
           >
             {isSaving ? "Salvando…" : "Salvar abastecimento"}
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>

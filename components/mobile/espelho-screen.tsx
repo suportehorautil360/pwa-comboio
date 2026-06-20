@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 
@@ -13,9 +13,10 @@ import {
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { abonosApi, type Abono } from "@/lib/api/abonos";
-import { escalaApi, type Escala } from "@/lib/api/escala";
-import { pontoApi, type PontoRegistro } from "@/lib/api/ponto";
+import { type PontoRegistro } from "@/lib/api/ponto";
+import { useAbonos, useEscala, useTimeRecords } from "@/lib/data/queries";
+import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { formatarCpf, limparCpf } from "@/lib/ponto/cpf";
 import {
   ESPELHO_COLUNAS,
@@ -77,11 +78,6 @@ function ehDoOperador(r: PontoRegistro, user: SessionUser): boolean {
 export function EspelhoScreen() {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [todas, setTodas] = useState<PontoRegistro[]>([]);
-  const [escala, setEscala] = useState<Escala | null>(null);
-  const [abonos, setAbonos] = useState<Abono[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState("");
 
   const [mes, setMes] = useState(mesAtual);
   const [diaDetalhe, setDiaDetalhe] = useState<{
@@ -96,34 +92,44 @@ export function EspelhoScreen() {
   const [expDe, setExpDe] = useState("");
   const [expAte, setExpAte] = useState("");
 
-  const carregar = useCallback(async () => {
+  // Leitura offline-first: batidas + escala + abonos cacheados.
+  const {
+    data: recordsData,
+    loading: loadingRecords,
+    refetch: recarregar,
+  } = useTimeRecords(user?.prefeituraId);
+  const { data: escalaData } = useEscala(user?.prefeituraId);
+  const { data: abonosData } = useAbonos(user?.prefeituraId);
+  const escala = escalaData ?? null;
+  const abonos = useMemo(() => abonosData ?? [], [abonosData]);
+  const carregando = !user || loadingRecords;
+
+  // Otimismo de UI: batidas ainda na fila aparecem no espelho (não editáveis).
+  const raw = useOutboxRaw();
+  const pendentes = useMemo(() => batidasPendentes(raw), [raw]);
+  const pendentesIds = useMemo(
+    () => new Set(pendentes.map((b) => b.id)),
+    [pendentes],
+  );
+  const todas = useMemo(
+    () =>
+      user
+        ? mesclarBatidas(
+            (recordsData ?? []).filter((r) => ehDoOperador(r, user)),
+            pendentes.filter((b) => ehDoOperador(b, user)),
+          )
+        : [],
+    [recordsData, user, pendentes],
+  );
+
+  useEffect(() => {
     const u = getSessionUser();
     if (!u) {
       router.replace("/");
       return;
     }
-    try {
-      const [lista, esc, abs] = await Promise.all([
-        pontoApi.listar(u.prefeituraId),
-        escalaApi.obter(u.prefeituraId),
-        abonosApi.listar(u.prefeituraId),
-      ]);
-      setUser(u);
-      setTodas(lista.filter((r) => ehDoOperador(r, u)));
-      setEscala(esc);
-      setAbonos(abs);
-      setErro("");
-    } catch {
-      setUser(u);
-      setErro("Não foi possível carregar o espelho. Verifique a conexão.");
-    } finally {
-      setCarregando(false);
-    }
+    queueMicrotask(() => setUser(u));
   }, [router]);
-
-  useEffect(() => {
-    queueMicrotask(() => void carregar());
-  }, [carregar]);
 
   const efetivas = useMemo(() => resolverLedger(todas), [todas]);
 
@@ -250,7 +256,11 @@ export function EspelhoScreen() {
           dia={diaDetalhe.dia}
           batidas={diaDetalhe.batidas}
           onVoltar={() => setDiaDetalhe(null)}
-          onEditar={(b) => setEditando(b)}
+          onEditar={(b) => {
+            // Batida ainda na fila não pode ser corrigida (id é do outbox, não
+            // existe no servidor) — ignora até sincronizar.
+            if (!pendentesIds.has(b.id)) setEditando(b);
+          }}
           onIncluir={(dia, tipo) => {
             setSucesso("");
             setIncluirAberto({ data: dia, tipo });
@@ -262,7 +272,7 @@ export function EspelhoScreen() {
           onSalvo={() => {
             setEditando(null);
             setSucesso("Correção enviada — pendente de aprovação do gestor.");
-            void carregar();
+            recarregar();
           }}
         />
         {user ? (
@@ -272,7 +282,7 @@ export function EspelhoScreen() {
             onEnviado={(msg) => {
               setIncluirAberto(null);
               setSucesso(msg);
-              void carregar();
+              recarregar();
             }}
             prefeituraId={user.prefeituraId}
             nome={user.nome}
@@ -361,12 +371,6 @@ export function EspelhoScreen() {
           </div>
         </CardContent>
       </Card>
-
-      {erro ? (
-        <p className="text-sm text-destructive" role="alert">
-          {erro}
-        </p>
-      ) : null}
 
       {carregando ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>

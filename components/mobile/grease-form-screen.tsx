@@ -12,17 +12,24 @@ import {
   type MeasurementType,
 } from "@/components/mobile/measurement-toggle";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
+import { EquipamentoAutocomplete } from "@/components/mobile/equipamento-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listarEquipamentos, type EquipamentoApi } from "@/lib/api/abastecimento";
 import { PONTOS_ENGRAXE } from "@/lib/api/lubrificacao";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
-import { getSessionUser } from "@/lib/session";
+import { useEquipamentos } from "@/lib/data/queries";
+import { submit } from "@/lib/offline/outbox";
+import { ApiError } from "@/lib/api/client";
+import { setFlash } from "@/lib/flash";
+import { getSessionUser, type SessionUser } from "@/lib/session";
 
 export function GreaseFormScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [equipamentos, setEquipamentos] = useState<EquipamentoApi[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const nome = user?.nome ?? "";
+
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data } = useEquipamentos(user?.prefeituraId);
+  const equipamentos = data ?? [];
 
   const [equipment, setEquipment] = useState("");
   const [measurement, setMeasurement] = useState<MeasurementType>("horimetro");
@@ -41,20 +48,12 @@ export function GreaseFormScreen() {
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    void (async () => {
-      setNome(user.nome);
-      try {
-        setEquipamentos(await listarEquipamentos(pid));
-      } catch {
-        setEquipamentos([]);
-      }
-    })();
+    queueMicrotask(() => setUser(u));
 
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       queueMicrotask(() => setGpsMsg("GPS indisponível neste dispositivo"));
@@ -105,10 +104,11 @@ export function GreaseFormScreen() {
 
     setIsSaving(true);
     try {
-      await enqueue("lubrificacao", {
+      const { synced } = await submit("lubrificacao", {
         prefeituraId: user.prefeituraId,
         plateOrChassis: equipment.trim().toUpperCase(),
         comboistaNome: user.nome,
+        funcionarioId: user.funcionarioId,
         reading: leituraNum,
         readingUnit,
         greasedPoints: pontos,
@@ -116,14 +116,20 @@ export function GreaseFormScreen() {
         latitude: coords?.lat ?? 0,
         longitude: coords?.lng ?? 0,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
-      setEquipment("");
-      setReading("");
-      setPontos([]);
-      setObservation("");
+      // Volta pro início (mesmo padrão de abastecer/reabastecer).
+      setFlash(
+        synced
+          ? "Engraxe registrado"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
+      router.replace("/dashboard");
+      return;
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      if (e instanceof ApiError && e.status === 404) {
+        setErro("Equipamento não encontrado. Confira a placa ou o chassi.");
+      } else {
+        setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -140,27 +146,12 @@ export function GreaseFormScreen() {
           <FormFieldLabel htmlFor="equipment" required>
             Placa ou chassi do equipamento
           </FormFieldLabel>
-          <Input
+          <EquipamentoAutocomplete
             id="equipment"
-            name="equipment"
-            list="equip-list"
-            placeholder="Ex: ABC-1234"
-            className="h-11 uppercase md:text-base"
+            equipamentos={equipamentos}
             value={equipment}
-            onChange={(e) => setEquipment(e.target.value)}
-            required
+            onChange={setEquipment}
           />
-          <datalist id="equip-list">
-            {equipamentos.map((eq) => {
-              const valor = eq.placa || eq.chassis || "";
-              if (!valor) return null;
-              return (
-                <option key={eq.id} value={valor}>
-                  {eq.descricao ?? eq.modelo ?? valor}
-                </option>
-              );
-            })}
-          </datalist>
         </div>
 
         <div className="space-y-2">
@@ -267,7 +258,7 @@ export function GreaseFormScreen() {
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>

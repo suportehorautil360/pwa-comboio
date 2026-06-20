@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wifi } from "lucide-react";
+import { TriangleAlert, Wifi } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { FormFieldLabel } from "@/components/mobile/form-field-label";
@@ -21,12 +21,24 @@ import {
   ORIGENS_CARGA,
   type ReabastecimentoSource,
 } from "@/lib/api/reabastecimento";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
-import { getSessionUser } from "@/lib/session";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { useComboios } from "@/lib/data/queries";
+import { revalidarFrota } from "@/lib/data/sync";
+import { submit } from "@/lib/offline/outbox";
+import { capacidadeDisponivel } from "@/lib/offline/pendentes";
+import { useOutboxRaw } from "@/lib/offline/use-outbox";
+import { setFlash } from "@/lib/flash";
+import {
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+  type SessionUser,
+} from "@/lib/session";
 
 export function ComboioRefillScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [comboioId, setComboioId] = useState("");
   const [source, setSource] = useState<ReabastecimentoSource>("gasStation");
   const [liters, setLiters] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -34,25 +46,73 @@ export function ComboioRefillScreen() {
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
 
+  // Leitura offline-first: cache na hora, revalida em background.
+  const { data } = useComboios(user?.prefeituraId, user?.funcionarioId);
+  const comboios = useMemo(() => data ?? [], [data]);
+  const nome = user?.nome ?? "";
+
+  // Quanto ainda cabe no tanque (capacidade − saldo otimista). Capacidade
+  // ausente/0 ⇒ Infinity (sem limite) — não trava comboio sem capacidadeTanque.
+  const raw = useOutboxRaw();
+  const comboioSel = comboios.find((c) => c.id === comboioId) ?? null;
+  const litrosNum = Number(liters);
+  const cabe = comboioSel
+    ? capacidadeDisponivel(
+        comboioSel.tank.capacity,
+        comboioSel.tank.currentVolume,
+        raw,
+      )
+    : Infinity;
+  const temLimite = Number.isFinite(cabe);
+  const estouraCapacidade = temLimite && litrosNum > 0 && litrosNum > cabe;
+
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    void (async () => {
-      setNome(user.nome);
-    })();
+    queueMicrotask(() => setUser(u));
   }, [router]);
+
+  // Seleciona o comboio salvo (ou o primeiro) quando a lista chega.
+  useEffect(() => {
+    if (comboios.length === 0) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboios.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboios.some((c) => c.id === salvo) && salvo) ||
+          comboios[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboios]);
+
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErro("");
     setSucesso("");
 
-    const litrosNum = Number(liters);
+    if (!comboioId) {
+      setErro("Selecione o comboio que está reabastecendo.");
+      return;
+    }
     if (!(litrosNum > 0)) {
       setErro("Informe os litros recebidos.");
+      return;
+    }
+    if (estouraCapacidade) {
+      setErro(
+        `Acima da capacidade do tanque. Cabe no máximo ${cabe.toLocaleString("pt-BR")} L.`,
+      );
       return;
     }
 
@@ -64,16 +124,25 @@ export function ComboioRefillScreen() {
 
     setIsSaving(true);
     try {
-      await enqueue("reabastecimento", {
+      const { synced } = await submit("reabastecimento", {
         prefeituraId: user.prefeituraId,
+        comboioId,
+        funcionarioId: user.funcionarioId,
         sourceType: source,
         receivedLiters: litrosNum,
         invoiceNumber: invoiceNumber.trim() || undefined,
       });
-      void flushOutbox();
-      setSucesso("Salvo! Sincroniza quando houver sinal.");
-      setLiters("");
-      setInvoiceNumber("");
+      // Revalida o saldo do comboio (ignora o TTL) pro dashboard refletir a nova
+      // carga na hora — o syncAll normal pularia por achar o cache fresco.
+      void revalidarFrota(user);
+      // Volta pro início: o dashboard mostra o tanque atualizado e o lançamento.
+      setFlash(
+        synced
+          ? "Carga registrada no comboio"
+          : "Salvo no aparelho — sincroniza sozinho",
+      );
+      router.replace("/dashboard");
+      return;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível salvar.");
     } finally {
@@ -88,6 +157,24 @@ export function ComboioRefillScreen() {
       <PageBackHeader eyebrow="Lançamento" title="Reabastecer comboio" />
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-2">
+          <FormFieldLabel htmlFor="comboio" required>
+            Comboio
+          </FormFieldLabel>
+          <ComboioSelect
+            id="comboio"
+            comboios={comboios}
+            value={comboioId}
+            onChange={trocarComboio}
+            disabled={comboios.length === 0}
+            placeholder={
+              comboios.length
+                ? "Selecione o comboio"
+                : "Nenhum comboio disponível"
+            }
+          />
+        </div>
+
         <div className="space-y-2">
           <FormFieldLabel htmlFor="source" required>
             Origem da carga
@@ -126,6 +213,22 @@ export function ComboioRefillScreen() {
             onChange={(e) => setLiters(e.target.value)}
             required
           />
+          {temLimite ? (
+            estouraCapacidade ? (
+              <p className="flex items-start gap-1.5 text-xs text-amber-500">
+                <TriangleAlert
+                  className="mt-0.5 size-3.5 shrink-0"
+                  aria-hidden
+                />
+                Acima da capacidade do tanque. Cabe no máximo{" "}
+                {cabe.toLocaleString("pt-BR")} L.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Cabe no máximo {cabe.toLocaleString("pt-BR")} L.
+              </p>
+            )
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -156,13 +259,13 @@ export function ComboioRefillScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving}
+            disabled={isSaving || estouraCapacidade}
           >
             {isSaving ? "Salvando…" : "Salvar carga"}
           </Button>
           <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
             <Wifi className="size-3.5 shrink-0" aria-hidden />
-            Salva no aparelho e sincroniza quando houver sinal
+            Funciona offline — sincroniza sozinho quando voltar o sinal.
           </p>
         </div>
       </form>

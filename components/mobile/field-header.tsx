@@ -1,25 +1,60 @@
 "use client";
 
-import { Truck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { RotateCw, Truck } from "lucide-react";
 
 import { brand } from "@/lib/design-system";
 import { Badge } from "@/components/ui/badge";
+import { syncAll } from "@/lib/data/sync";
+import { flushOutbox } from "@/lib/offline/outbox";
 import { useOutbox } from "@/lib/offline/use-outbox";
+import { getSessionUser } from "@/lib/session";
 
 type FieldHeaderProps = {
   /** Nome do operador logado (ex.: "J. Ferreira"). */
   nome?: string;
   /** Cargo/papel. Padrão: COMBOÍSTA. */
   papel?: string;
+  /**
+   * Override opcional do estado de conexão. Por padrão o header detecta sozinho
+   * (`navigator.onLine` + eventos) — antes, telas que não passavam o prop ficavam
+   * presas em "Online" mesmo offline.
+   */
   online?: boolean;
 };
 
 export function FieldHeader({
   nome,
   papel = "COMBOÍSTA",
-  online = true,
+  online: onlineProp,
 }: FieldHeaderProps) {
   const { pendentes, falhos } = useOutbox();
+  const [onlineAuto, setOnlineAuto] = useState(true);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  async function sincronizar() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      await flushOutbox();
+      await syncAll(getSessionUser(), { force: true });
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
+  useEffect(() => {
+    const sync = () => setOnlineAuto(navigator.onLine);
+    queueMicrotask(sync);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
+  const online = onlineProp ?? onlineAuto;
 
   let status = online ? "Sincronizado" : "Offline";
   if (falhos > 0) status = `${falhos} com erro`;
@@ -38,9 +73,24 @@ export function FieldHeader({
           />
           {online ? "Online" : "Offline"}
         </div>
-        <Badge variant="outline" className="uppercase tracking-wider">
-          {status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="uppercase tracking-wider">
+            {status}
+          </Badge>
+          <button
+            type="button"
+            onClick={() => void sincronizar()}
+            disabled={sincronizando}
+            aria-label="Sincronizar agora"
+            title="Sincronizar agora"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+          >
+            <RotateCw
+              className={`size-4 ${sincronizando ? "animate-spin" : ""}`}
+              aria-hidden
+            />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

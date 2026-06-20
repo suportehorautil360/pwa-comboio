@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   flushOutbox,
@@ -10,9 +10,14 @@ import {
   subscribe,
   type LancamentoPendente,
   type OutboxCounts,
+  type OutboxItem,
 } from "./outbox";
+import { saldoOtimista } from "./pendentes";
 
 const VAZIO: OutboxCounts = { pendentes: 0, falhos: 0 };
+
+/** Kinds de ponto — sincronizam pela outbox mas não são lançamentos de frota. */
+const PONTO_KINDS = new Set<string>(["ponto", "editar-ponto", "solicitacao"]);
 
 /**
  * Contadores do outbox (pendentes/falhos) e disparo da sincronização —
@@ -59,11 +64,73 @@ export function useOutboxItems(): LancamentoPendente[] {
     let ativo = true;
     const atualizar = () => {
       void listItems().then((its) => {
-        // Ponto sincroniza pela mesma outbox, mas não é um lançamento de frota.
+        // Ponto (batida/ajuste/solicitação) sincroniza pela mesma outbox, mas
+        // não é um lançamento de frota — fica fora deste feed.
         if (ativo)
           setItems(
-            its.filter((i) => i.kind !== "ponto").map(itemParaLancamento),
+            its
+              .filter((i) => !PONTO_KINDS.has(i.kind))
+              .map(itemParaLancamento),
           );
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
+}
+
+/**
+ * Itens crus da fila (com payload), reativos. Para o otimismo de UI — mesclar
+ * batidas pendentes na folha do ponto, descontar o saldo do tanque, etc.
+ */
+export function useOutboxRaw(): OutboxItem[] {
+  const [items, setItems] = useState<OutboxItem[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its);
+      });
+    };
+    const unsub = subscribe(atualizar);
+    atualizar();
+    return () => {
+      ativo = false;
+      unsub();
+    };
+  }, []);
+
+  return items;
+}
+
+/**
+ * Saldo otimista do tanque (servidor + fila pendente), reativo. Use para mostrar
+ * o saldo "na hora" e para limitar os lançamentos antes da sincronização.
+ */
+export function useSaldoOtimista(currentVolume: number): number {
+  const raw = useOutboxRaw();
+  return useMemo(() => saldoOtimista(currentVolume, raw), [currentVolume, raw]);
+}
+
+/**
+ * Itens em erro definitivo (dead-letter), de qualquer tipo (frota e ponto) —
+ * para a UI de reprocesso/descarte. Reage às mudanças da fila.
+ */
+export function useOutboxFailed(): LancamentoPendente[] {
+  const [items, setItems] = useState<LancamentoPendente[]>([]);
+
+  useEffect(() => {
+    let ativo = true;
+    const atualizar = () => {
+      void listItems().then((its) => {
+        if (ativo) setItems(its.filter((i) => i.failed).map(itemParaLancamento));
       });
     };
     const unsub = subscribe(atualizar);

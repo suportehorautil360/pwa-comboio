@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
+import { SyncManager } from "@/components/pwa/sync-manager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { brand } from "@/lib/design-system";
 
@@ -57,6 +58,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
+        <SyncManager />
         <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
       </body>
     </html>

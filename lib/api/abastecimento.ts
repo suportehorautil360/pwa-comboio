@@ -11,6 +11,12 @@ export interface EquipamentoApi {
   placa?: string;
   tipo?: string;
   status?: string;
+  /** Capacidade do tanque (L); 0/ausente = sem limite. */
+  capacidadeTanque?: number;
+  /** KM/horímetro atual do equipamento — baseline da leitura (atualizado a cada abastecimento). */
+  medicaoAtual?: number;
+  /** Unidade da leitura do equipamento (km = hodômetro, h = horímetro). */
+  unidadeRevisao?: "km" | "h";
 }
 
 export interface PostoApi {
@@ -52,4 +58,21 @@ export async function criarAbastecimento(
   payload: CriarAbastecimentoPayload,
 ): Promise<void> {
   await api.post("/abastecimentos", payload);
+}
+
+/**
+ * Maior leitura (horímetro/km) já registrada para o equipamento — para validar a
+ * próxima antes de enviar. `null` = sem registro anterior (qualquer valor vale)
+ * ou equipamento fora do cadastro.
+ */
+export async function ultimaLeituraAbastecimento(
+  prefeituraId: string,
+  plateOrChassis: string,
+  measurementType: MeasurementType,
+): Promise<number | null> {
+  const qs = new URLSearchParams({ plateOrChassis, measurementType });
+  const r = await api.get<{ data: { ultimaLeitura: number | null } }>(
+    `/abastecimentos/ultima-leitura/${prefeituraId}?${qs.toString()}`,
+  );
+  return r.data?.ultimaLeitura ?? null;
 }

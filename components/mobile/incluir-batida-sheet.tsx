@@ -83,7 +83,7 @@ export function IncluirBatidaSheet({
     try {
       const timestampOriginal = new Date(`${data}T${hora}:00`).toISOString();
       const anexoDataUrl = anexo ? await fileToDataUrl(anexo) : undefined;
-      await solicitacoesPontoApi.criar({
+      const { synced } = await solicitacoesPontoApi.criar({
         tipo: "incluir",
         tipoBatida: tipo,
         prefeituraId,
@@ -97,7 +97,11 @@ export function IncluirBatidaSheet({
       });
       setEnviando(false);
       const label = TIPOS_PONTO.find((t) => t.tipo === tipo)?.label ?? tipo;
-      onEnviado(`Inclusão de "${label}" enviada ao gestor.`);
+      onEnviado(
+        synced
+          ? `Inclusão de "${label}" enviada ao gestor.`
+          : `Inclusão de "${label}" salva no aparelho — vai ao gestor ao reconectar.`,
+      );
     } catch {
       setEnviando(false);
       setErro("Não foi possível enviar. Verifique a conexão.");

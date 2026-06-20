@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownToLine, Fuel, Sun } from "lucide-react";
 
@@ -10,15 +10,18 @@ import { FieldHeader } from "@/components/mobile/field-header";
 import { FuelGauge } from "@/components/mobile/fuel-gauge";
 import { SectionHeading } from "@/components/mobile/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
+import { ComboioSelect } from "@/components/mobile/comboio-select";
+import { FlashToast } from "@/components/mobile/flash-toast";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { type TanqueComboio } from "@/lib/api/dashboard";
+import { useComboios, useUltimosLancamentos } from "@/lib/data/queries";
+import { useOutboxItems, useSaldoOtimista } from "@/lib/offline/use-outbox";
 import {
-  getTanqueComboio,
-  getUltimosLancamentos,
-  type LancamentoItem,
-  type TanqueComboio,
-} from "@/lib/api/dashboard";
-import { useOutboxItems } from "@/lib/offline/use-outbox";
-import { getSessionUser } from "@/lib/session";
+  getComboioSelecionado,
+  getSessionUser,
+  setComboioSelecionado,
+  type SessionUser,
+} from "@/lib/session";
 
 function labelComboio(t: TanqueComboio): string {
   const partes = [
@@ -32,42 +35,56 @@ function labelComboio(t: TanqueComboio): string {
 
 export function FieldHomeScreen() {
   const router = useRouter();
-  const [nome, setNome] = useState("");
-  const [tank, setTank] = useState<TanqueComboio | null>(null);
-  const [lancamentos, setLancamentos] = useState<LancamentoItem[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [comboioId, setComboioId] = useState("");
   const [online, setOnline] = useState(true);
-  const [loading, setLoading] = useState(true);
   const pendentes = useOutboxItems();
 
+  // Leitura offline-first: comboios + últimos lançamentos cacheados.
+  const { data: comboiosData, loading: loadingComboios } = useComboios(
+    user?.prefeituraId,
+    user?.funcionarioId,
+  );
+  const { data: lancData } = useUltimosLancamentos(user?.prefeituraId);
+  const comboios = useMemo(() => comboiosData ?? [], [comboiosData]);
+  const lancamentos = lancData ?? [];
+  const nome = user?.nome ?? "";
+  const loading = !user || loadingComboios;
+
+  const comboioSel = useMemo(
+    () => comboios.find((c) => c.id === comboioId) ?? null,
+    [comboios, comboioId],
+  );
+  const tank = comboioSel?.tank ?? null;
+
+  // Otimismo de UI: desconta/soma os lançamentos ainda na fila no saldo exibido
+  // (atribuídos ao comboio do turno — o front não guarda comboioId por item).
+  const saldoLocal = useSaldoOtimista(tank?.currentVolume ?? 0);
+
   useEffect(() => {
-    const user = getSessionUser();
-    if (!user?.prefeituraId) {
+    const u = getSessionUser();
+    if (!u?.prefeituraId || !u.funcionarioId) {
       router.push("/");
       return;
     }
-    const pid = user.prefeituraId;
-    let ativo = true;
-    void (async () => {
-      if (ativo) setNome(user.nome);
-      try {
-        const [t, l] = await Promise.all([
-          getTanqueComboio(pid),
-          getUltimosLancamentos(pid),
-        ]);
-        if (ativo) {
-          setTank(t);
-          setLancamentos(l);
-        }
-      } catch {
-        /* mantém vazio em caso de erro */
-      } finally {
-        if (ativo) setLoading(false);
-      }
-    })();
-    return () => {
-      ativo = false;
-    };
+    queueMicrotask(() => setUser(u));
   }, [router]);
+
+  // Seleciona o comboio (salvo ou primeiro) quando a lista chega.
+  useEffect(() => {
+    if (comboios.length === 0) return;
+    queueMicrotask(() =>
+      setComboioId((atual) => {
+        if (atual && comboios.some((c) => c.id === atual)) return atual;
+        const salvo = getComboioSelecionado();
+        return (
+          (salvo && comboios.some((c) => c.id === salvo) && salvo) ||
+          comboios[0]?.id ||
+          ""
+        );
+      }),
+    );
+  }, [comboios]);
 
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
@@ -80,9 +97,23 @@ export function FieldHomeScreen() {
     };
   }, []);
 
+  function trocarComboio(id: string) {
+    setComboioId(id);
+    setComboioSelecionado(id);
+  }
+
   return (
     <div className="mx-auto w-full max-w-lg space-y-6">
+      <FlashToast />
       <FieldHeader nome={nome} online={online} />
+
+      {comboios.length > 1 ? (
+        <ComboioSelect
+          comboios={comboios}
+          value={comboioId}
+          onChange={trocarComboio}
+        />
+      ) : null}
 
       <Card className="ring-border/50">
         <CardContent className="space-y-4 pt-0">
@@ -91,18 +122,19 @@ export function FieldHomeScreen() {
               TANQUE DO COMBOIO
             </p>
             <p className="mt-1 font-mono text-xs text-muted-foreground">
-              {tank ? labelComboio(tank) : loading ? "Carregando…" : "Sem tanque cadastrado"}
+              {tank
+                ? labelComboio(tank)
+                : loading
+                  ? "Carregando…"
+                  : "Nenhum comboio disponível"}
             </p>
           </div>
 
-          <FuelGauge
-            value={tank?.currentVolume ?? 0}
-            max={tank?.capacity ?? 0}
-          />
+          <FuelGauge value={saldoLocal} max={tank?.capacity ?? 0} />
 
           <div className="flex items-end justify-between gap-4">
             <p className="text-3xl font-semibold tabular-nums tracking-tight">
-              {(tank?.currentVolume ?? 0).toLocaleString("pt-BR")}{" "}
+              {saldoLocal.toLocaleString("pt-BR")}{" "}
               <span className="text-lg font-medium text-muted-foreground">
                 L
               </span>
