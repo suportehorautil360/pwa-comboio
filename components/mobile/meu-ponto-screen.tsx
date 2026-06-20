@@ -99,7 +99,9 @@ export function MeuPontoScreen() {
   const [salvando, setSalvando] = useState(false);
   const [editando, setEditando] = useState<PontoRegistro | null>(null);
   const [sucesso, setSucesso] = useState("");
-  // Histórico inicia recolhido por dia (a lista fica muito longa toda aberta).
+  // Histórico inicia totalmente fechado (a seção esconde os dias) e, ao abrir,
+  // cada dia também começa recolhido (a lista fica muito longa toda aberta).
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   const [diasAbertos, setDiasAbertos] = useState<Set<string>>(new Set());
 
   // Leitura offline-first: batidas + dados da empresa cacheados.
@@ -336,8 +338,24 @@ export function MeuPontoScreen() {
 
       {/* Histórico */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold">Histórico</h2>
-        {carregando ? (
+        <button
+          type="button"
+          aria-expanded={historicoAberto}
+          onClick={() => setHistoricoAberto((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+        >
+          <h2 className="text-sm font-semibold">Histórico</h2>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {!carregando && historico.length > 0
+              ? `${historico.length} ${historico.length === 1 ? "dia" : "dias"}`
+              : null}
+            <ChevronRight
+              className={`size-4 shrink-0 transition-transform ${historicoAberto ? "rotate-90" : ""}`}
+              aria-hidden
+            />
+          </span>
+        </button>
+        {!historicoAberto ? null : carregando ? (
           <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : historico.length === 0 ? (
           <p className="text-sm text-muted-foreground">
