@@ -343,7 +343,8 @@ export function SolicitarAjustes({
             <SelectTrigger className="h-10 w-full">
               <SelectValue placeholder="Selecione…" />
             </SelectTrigger>
-            <SelectContent>
+            {/* z acima do overlay do BottomSheet (z-[60]); senão o dropdown abre atrás. */}
+            <SelectContent className="z-[70]">
               {batidas.length === 0 ? (
                 <SelectItem value="__none" disabled>
                   Nenhuma batida disponível
