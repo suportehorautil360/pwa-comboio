@@ -5,7 +5,9 @@
  *
  * Estratégias (defaultCache do @serwist/next):
  * - Navegação (HTML/RSC): NetworkFirst → cache (fresco online, abre offline).
- *   Rota nunca vista offline cai na página `/~offline` (precache).
+ *   TODAS as rotas têm o documento pré-cacheado (additionalPrecacheEntries em
+ *   next.config) → qualquer tela abre offline mesmo sem visita prévia. O
+ *   `/~offline` só aparece em último caso (rota desconhecida / SW instalando).
  * - `_next/static/**` (hash imutável): CacheFirst.
  * - `_next/data`/RSC, imagens, fontes: estratégias dedicadas do defaultCache.
  * - API NestJS (cross-origin): não é interceptada — leitura offline fica no
