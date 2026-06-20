@@ -78,9 +78,9 @@ export function EquipamentoAutocomplete({
                 className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-2 text-left hover:bg-accent"
               >
                 <span className="text-sm font-medium">{valor}</span>
-                {e.descricao || e.modelo ? (
+                {e.descricao || e.modelo || e.tipo ? (
                   <span className="text-xs text-muted-foreground">
-                    {e.descricao ?? e.modelo}
+                    {e.descricao || e.modelo || e.tipo}
                   </span>
                 ) : null}
               </button>

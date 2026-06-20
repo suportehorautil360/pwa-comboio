@@ -343,7 +343,9 @@ export function SolicitarAjustes({
             <SelectTrigger className="h-10 w-full">
               <SelectValue placeholder="Selecione…" />
             </SelectTrigger>
-            <SelectContent>
+            {/* z acima do overlay do BottomSheet (z-[60]); max-h p/ rolar a lista
+                longa de batidas (item-aligned não preenche a var de altura). */}
+            <SelectContent className="z-[70] max-h-[60vh]">
               {batidas.length === 0 ? (
                 <SelectItem value="__none" disabled>
                   Nenhuma batida disponível

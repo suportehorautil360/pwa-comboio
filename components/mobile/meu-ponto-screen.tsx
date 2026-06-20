@@ -99,6 +99,10 @@ export function MeuPontoScreen() {
   const [salvando, setSalvando] = useState(false);
   const [editando, setEditando] = useState<PontoRegistro | null>(null);
   const [sucesso, setSucesso] = useState("");
+  // Histórico inicia totalmente fechado (a seção esconde os dias) e, ao abrir,
+  // cada dia também começa recolhido (a lista fica muito longa toda aberta).
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [diasAbertos, setDiasAbertos] = useState<Set<string>>(new Set());
 
   // Leitura offline-first: batidas + dados da empresa cacheados.
   const {
@@ -334,51 +338,95 @@ export function MeuPontoScreen() {
 
       {/* Histórico */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold">Histórico</h2>
-        {carregando ? (
+        <button
+          type="button"
+          aria-expanded={historicoAberto}
+          onClick={() => setHistoricoAberto((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 text-left"
+        >
+          <h2 className="text-sm font-semibold">Histórico</h2>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {!carregando && historico.length > 0
+              ? `${historico.length} ${historico.length === 1 ? "dia" : "dias"}`
+              : null}
+            <ChevronRight
+              className={`size-4 shrink-0 transition-transform ${historicoAberto ? "rotate-90" : ""}`}
+              aria-hidden
+            />
+          </span>
+        </button>
+        {!historicoAberto ? null : carregando ? (
           <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : historico.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nenhuma batida em dias anteriores.
           </p>
         ) : (
-          historico.map(({ dia, batidas }) => (
-            <Card key={dia} className="ring-border/50">
-              <CardContent className="space-y-1 pt-0">
-                <p className="pb-1 text-xs font-semibold capitalize text-muted-foreground">
-                  {dataLabel(dia)}
-                </p>
-                {batidas.map((b) => {
-                  const label =
-                    TIPOS_PONTO.find((t) => t.tipo === b.tipo)?.label ?? b.tipo;
-                  return (
-                    <div
-                      key={b.id}
-                      className="flex items-center justify-between gap-3 border-t border-border py-2 text-sm"
-                    >
-                      <span className="min-w-0 truncate">{label}</span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="tabular-nums font-medium">
-                          {horaDe(b.timestampOriginal)}
-                        </span>
-                        {podeEmitirCRPT(b) ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Baixar comprovante"
-                            onClick={() => void baixarComprovante(b)}
+          historico.map(({ dia, batidas }) => {
+            const aberto = diasAbertos.has(dia);
+            return (
+              <Card key={dia} className="ring-border/50">
+                <CardContent className="space-y-1 pt-0">
+                  <button
+                    type="button"
+                    aria-expanded={aberto}
+                    onClick={() =>
+                      setDiasAbertos((atual) => {
+                        const novo = new Set(atual);
+                        if (novo.has(dia)) novo.delete(dia);
+                        else novo.add(dia);
+                        return novo;
+                      })
+                    }
+                    className="flex w-full items-center justify-between gap-2 py-1 text-left"
+                  >
+                    <span className="text-xs font-semibold capitalize text-muted-foreground">
+                      {dataLabel(dia)}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {batidas.length}{" "}
+                      {batidas.length === 1 ? "batida" : "batidas"}
+                      <ChevronRight
+                        className={`size-4 shrink-0 transition-transform ${aberto ? "rotate-90" : ""}`}
+                        aria-hidden
+                      />
+                    </span>
+                  </button>
+                  {aberto
+                    ? batidas.map((b) => {
+                        const label =
+                          TIPOS_PONTO.find((t) => t.tipo === b.tipo)?.label ??
+                          b.tipo;
+                        return (
+                          <div
+                            key={b.id}
+                            className="flex items-center justify-between gap-3 border-t border-border py-2 text-sm"
                           >
-                            <Download className="size-4" aria-hidden />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          ))
+                            <span className="min-w-0 truncate">{label}</span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span className="tabular-nums font-medium">
+                                {horaDe(b.timestampOriginal)}
+                              </span>
+                              {podeEmitirCRPT(b) ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="Baixar comprovante"
+                                  onClick={() => void baixarComprovante(b)}
+                                >
+                                  <Download className="size-4" aria-hidden />
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
+                    : null}
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 

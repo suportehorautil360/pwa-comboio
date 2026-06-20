@@ -120,7 +120,8 @@ export function IncluirBatidaSheet({
           <SelectTrigger className="h-10 w-full">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          {/* z acima do overlay do BottomSheet (z-[60]); senão o dropdown abre atrás. */}
+          <SelectContent className="z-[70]">
             {TIPOS_PONTO.map((t) => (
               <SelectItem key={t.tipo} value={t.tipo}>
                 {t.label}
