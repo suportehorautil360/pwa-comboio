@@ -1,4 +1,6 @@
 /** Abastecimento — /abastecimentos, /equipamentos, /postos (NestJS). */
+import { ehCombustivelDiesel } from "@/lib/combustivel";
+
 import { api } from "./client";
 
 export type MeasurementType = "horimetro" | "hodometro";
@@ -19,6 +21,8 @@ export interface EquipamentoApi {
   medicaoAtual?: number;
   /** Unidade da leitura do equipamento (km = hodômetro, h = horímetro). */
   unidadeRevisao?: "km" | "h";
+  /** Combustível cadastrado no 360 — usado p/ filtrar só diesel no abastecimento. */
+  combustivel?: string;
 }
 
 export interface PostoApi {
@@ -65,6 +69,13 @@ export async function criarAbastecimento(
 /** Comboio? (case-insensitive, igual ao back/360). */
 export function ehComboioTipo(tipo?: string): boolean {
   return (tipo ?? "").trim().toLowerCase() === "comboio";
+}
+
+/** Lista só equipamentos a diesel (regra do PWA comboio). */
+export function filtrarEquipamentosDiesel(
+  equipamentos: EquipamentoApi[],
+): EquipamentoApi[] {
+  return equipamentos.filter((e) => ehCombustivelDiesel(e.combustivel));
 }
 
 /**

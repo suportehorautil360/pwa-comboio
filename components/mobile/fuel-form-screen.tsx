@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, TriangleAlert, Wifi } from "lucide-react";
 
@@ -25,6 +25,7 @@ import {
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import {
   ehComboioTipo,
+  filtrarEquipamentosDiesel,
   tetoAbastecimento,
   ultimaLeituraAbastecimento,
 } from "@/lib/api/abastecimento";
@@ -70,7 +71,10 @@ export function FuelFormScreen() {
     user?.prefeituraId,
     user?.funcionarioId,
   );
-  const equipamentos = equipData ?? [];
+  const equipamentos = useMemo(
+    () => filtrarEquipamentosDiesel(equipData ?? []),
+    [equipData],
+  );
   const postos = postosData ?? [];
   const comboios = comboiosData ?? [];
 
@@ -353,8 +357,8 @@ export function FuelFormScreen() {
           />
           <p className="text-xs leading-relaxed text-muted-foreground">
             {equipamentos.length > 0
-              ? `${equipamentos.length} equipamento(s) no cadastro — comece a digitar.`
-              : "Digite a placa ou chassi do equipamento."}
+              ? `${equipamentos.length} equipamento(s) a diesel no cadastro — comece a digitar.`
+              : "Nenhum equipamento a diesel no cadastro. Ajuste o combustível no 360."}
           </p>
           {alvoComboio ? (
             <p className="text-xs font-medium text-brand">
