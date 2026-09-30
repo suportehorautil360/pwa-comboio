@@ -9,13 +9,13 @@ import {
   ChevronRight,
   Download,
   ListChecks,
-  Pencil,
 } from "lucide-react";
 
 import { EditarBatidaSheet } from "@/components/mobile/editar-batida-sheet";
 import { FieldHeader } from "@/components/mobile/field-header";
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { RelogioAoVivo } from "@/components/mobile/relogio-ao-vivo";
 import { SolicitarAjustes } from "@/components/mobile/solicitar-ajustes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,12 +24,20 @@ import {
   type PontoRegistro,
   type TipoPonto,
 } from "@/lib/api/ponto";
-import { useEmpresa, useTimeRecords } from "@/lib/data/queries";
-import { enqueue, flushOutbox } from "@/lib/offline/outbox";
+import { ApiError } from "@/lib/api/client";
+import {
+  useAbonos,
+  useEmpresa,
+  useEscala,
+  useTimeRecords,
+} from "@/lib/data/queries";
+import { submit } from "@/lib/offline/outbox";
 import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
 import { limparCpf } from "@/lib/ponto/cpf";
 import { baixarCRPT, montarCRPT, podeEmitirCRPT } from "@/lib/ponto/crpt";
+import { abonosDoMes, diasDoMes, totaisDosDias } from "@/lib/ponto/espelho";
+import { fmtMin } from "@/lib/ponto/horas";
 import { resolverLedger, type BatidaEfetiva } from "@/lib/ponto/resolver-ledger";
 import { getSessionUser, type SessionUser } from "@/lib/session";
 
@@ -78,15 +86,28 @@ function ehDoOperador(r: PontoRegistro, user: SessionUser): boolean {
   );
 }
 
+/**
+ * Selo da batida, com os mesmos estados da folha do checklist ("Registrado",
+ * "Ajuste pendente", "Sem registro") e mais um que só existe aqui: a batida
+ * ainda na fila do aparelho.
+ */
 function selo(
   reg: BatidaEfetiva,
   pendente: boolean,
-): { label: string; classe: string } {
-  if (pendente)
-    return { label: "Pendente de envio", classe: "text-amber-500" };
-  if (reg.ajustePendente)
-    return { label: "Ajuste pendente", classe: "text-amber-500" };
-  return { label: "Registrado", classe: "text-success" };
+): { label: string; pendente: boolean } {
+  if (pendente) return { label: "Pendente de envio", pendente: true };
+  if (reg.ajustePendente) return { label: "Ajuste pendente", pendente: true };
+  return { label: "Registrado", pendente: false };
+}
+
+const SELO_BASE =
+  "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide";
+const SELO_OK = `${SELO_BASE} bg-success/15 text-success`;
+const SELO_PENDENTE = `${SELO_BASE} bg-warning/15 text-warning`;
+
+function mesAtual(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function MeuPontoScreen() {
@@ -111,7 +132,10 @@ export function MeuPontoScreen() {
     refetch: recarregar,
   } = useTimeRecords(user?.prefeituraId);
   const { data: empresaData } = useEmpresa(user?.prefeituraId);
+  const { data: escalaData } = useEscala(user?.prefeituraId);
+  const { data: abonosData } = useAbonos(user?.prefeituraId);
   const empresa = empresaData ?? null;
+  const escala = escalaData ?? null;
   const carregando = !user || loadingRecords;
 
   // Otimismo de UI: batidas ainda na fila aparecem na folha como "pendente".
@@ -120,6 +144,10 @@ export function MeuPontoScreen() {
   const pendentesIds = useMemo(
     () => new Set(pendentes.map((b) => b.id)),
     [pendentes],
+  );
+  const pendentesDoOperador = useMemo(
+    () => (user ? pendentes.filter((b) => ehDoOperador(b, user)).length : 0),
+    [pendentes, user],
   );
   const todas = useMemo(
     () =>
@@ -168,6 +196,18 @@ export function MeuPontoScreen() {
       }));
   }, [efetivas]);
 
+  /**
+   * Saldo do mês corrente — o mesmo cálculo (e as mesmas funções) do card de
+   * totais do espelho, que este card abre. Mesmo papel do "Saldo do mês" da
+   * folha do checklist.
+   */
+  const [mesCorrente] = useState(mesAtual);
+  const saldoMes = useMemo(() => {
+    const abonosDias = abonosDoMes(abonosData ?? [], user?.cpf, mesCorrente);
+    const dias = diasDoMes(efetivas, abonosDias, mesCorrente, new Date());
+    return { ...totaisDosDias(dias, abonosDias, escala), dias: dias.length };
+  }, [abonosData, user, mesCorrente, efetivas, escala]);
+
   async function onFoto(file: File | null) {
     if (!file) {
       setFoto("");
@@ -188,26 +228,41 @@ export function MeuPontoScreen() {
 
   async function confirmarBatida() {
     if (!batendo || !user) return;
+    const label = TIPOS_PONTO.find((t) => t.tipo === batendo)?.label ?? "Batida";
     if (!foto) {
       setErro("Capture a selfie antes de confirmar.");
       return;
     }
+    setErro("");
+    setSucesso("");
     setSalvando(true);
+    const agora = new Date().toISOString();
     try {
-      await enqueue("ponto", {
+      // `submit` tenta enviar na hora e só cai na fila sem sinal — é o que
+      // permite dizer, como o checklist, se a batida já foi registrada ou
+      // ficou no aparelho.
+      const r = await submit("ponto", {
         name: user.nome,
         photo: foto,
         prefeituraId: user.prefeituraId,
-        timestampOriginal: new Date().toISOString(),
+        timestampOriginal: agora,
         tipo: batendo,
         cpf: user.cpf,
       });
       setBatendo(null);
       setFoto("");
-      await flushOutbox();
+      setSucesso(
+        r.synced
+          ? `${label} registrada às ${horaDe(agora)}.`
+          : `${label} registrada offline — sincroniza ao reconectar.`,
+      );
       recarregar();
-    } catch {
-      setErro("Não foi possível registrar a batida. Tente de novo.");
+    } catch (e) {
+      setErro(
+        e instanceof ApiError && e.message
+          ? e.message
+          : "Não foi possível registrar a batida. Tente de novo.",
+      );
     } finally {
       setSalvando(false);
     }
@@ -243,96 +298,125 @@ export function MeuPontoScreen() {
         </p>
       ) : null}
 
-      {/* Folha do dia */}
       <Card className="ring-border/50">
-        <CardContent className="space-y-1 pt-0">
-          <h2 className="pb-1 text-sm font-semibold">Hoje</h2>
-          {TIPOS_PONTO.map(({ tipo, label }) => {
-            const reg = porTipoHoje.get(tipo);
-            const ehPendente = reg ? pendentesIds.has(reg.id) : false;
-            const s = reg ? selo(reg, ehPendente) : null;
-            return (
-              <div key={tipo} className="border-t border-border py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{label}</p>
-                    <p className={`text-xs ${s ? s.classe : "text-muted-foreground"}`}>
-                      {reg ? `${horaDe(reg.timestampOriginal)} · ${s!.label}` : "Sem registro"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {reg && !ehPendente && podeEmitirCRPT(reg) ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5 text-xs"
-                        onClick={() => void baixarComprovante(reg)}
-                      >
-                        <Download className="size-3.5" aria-hidden />
-                        Comprovante
-                      </Button>
-                    ) : null}
-                    {reg && !ehPendente ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Editar horário"
-                        onClick={() => setEditando(reg)}
-                      >
-                        <Pencil className="size-3.5" aria-hidden />
-                      </Button>
-                    ) : null}
-                    {!reg ? (
-                      <Button
-                        type="button"
-                        variant="brand"
-                        size="sm"
-                        className="gap-1.5 text-xs"
-                        onClick={() => iniciarBater(tipo)}
-                        disabled={batendo === tipo}
-                      >
-                        <Camera className="size-3.5" aria-hidden />
-                        Bater
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
+        <CardContent className="pt-0">
+          <RelogioAoVivo comData />
+        </CardContent>
+      </Card>
 
-                {batendo === tipo ? (
-                  <div className="mt-3 space-y-3">
-                    <PhotoUpload
-                      defaultFacing="user"
-                      label="Tirar selfie"
-                      onSelect={(f) => void onFoto(f)}
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="brand"
-                        className="flex-1"
-                        onClick={() => void confirmarBatida()}
-                        disabled={salvando}
-                      >
-                        {salvando ? "Registrando…" : `Confirmar ${label}`}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setBatendo(null);
-                          setFoto("");
-                        }}
-                      >
-                        Cancelar
-                      </Button>
+      <div className="space-y-2">
+        <span className="text-sm font-medium">Funcionário</span>
+        <div className="flex h-11 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+          {user?.nome || "—"}
+        </div>
+      </div>
+
+      {pendentesDoOperador > 0 ? (
+        <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+          {pendentesDoOperador} batida(s) aguardando sincronização.
+        </p>
+      ) : null}
+
+      {/* Registros do dia */}
+      <Card className="ring-border/50">
+        <CardContent className="pt-0">
+          <h2 className="pb-2 text-sm font-semibold">Registros do dia</h2>
+          <ul>
+            {TIPOS_PONTO.map(({ tipo, label }) => {
+              const reg = porTipoHoje.get(tipo);
+              const ehPendente = reg ? pendentesIds.has(reg.id) : false;
+              const s = reg ? selo(reg, ehPendente) : null;
+              return (
+                <li key={tipo} className="border-t border-border py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <span className="text-sm font-semibold">{label}</span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <strong className="text-base tabular-nums">
+                        {reg ? horaDe(reg.timestampOriginal) : "—:—"}
+                      </strong>
+                      <span className={s && !s.pendente ? SELO_OK : SELO_PENDENTE}>
+                        {s ? s.label : "Sem registro"}
+                      </span>
+                      {reg && !ehPendente ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditando(reg)}
+                        >
+                          Editar
+                        </Button>
+                      ) : null}
+                      {!reg ? (
+                        <Button
+                          type="button"
+                          variant="brand"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => iniciarBater(tipo)}
+                          disabled={batendo === tipo}
+                        >
+                          <Camera className="size-3.5" aria-hidden />
+                          Bater
+                        </Button>
+                      ) : null}
+                      {reg && !ehPendente && podeEmitirCRPT(reg) ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          title="Baixar comprovante (CRPT) desta batida"
+                          onClick={() => void baixarComprovante(reg)}
+                        >
+                          <Download className="size-3.5" aria-hidden />
+                          Comprovante
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
+
+                  {reg?.ajustePendente && reg.horarioAjustePendente ? (
+                    <p className="mt-2 text-xs text-warning">
+                      Correção para {horaDe(reg.horarioAjustePendente)}{" "}
+                      aguardando aprovação do RH. Vale o horário original até lá.
+                    </p>
+                  ) : null}
+
+                  {batendo === tipo ? (
+                    <div className="mt-3 space-y-3">
+                      <PhotoUpload
+                        defaultFacing="user"
+                        label="Tirar selfie"
+                        onSelect={(f) => void onFoto(f)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="brand"
+                          className="flex-1"
+                          onClick={() => void confirmarBatida()}
+                          disabled={salvando}
+                        >
+                          {salvando ? "Registrando…" : `Confirmar ${label}`}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setBatendo(null);
+                            setFoto("");
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </CardContent>
       </Card>
 
@@ -429,6 +513,29 @@ export function MeuPontoScreen() {
           })
         )}
       </div>
+
+      <Card className="ring-border/50">
+        <CardContent className="space-y-1 pt-0">
+          <p className="text-sm font-semibold text-muted-foreground">
+            Saldo do mês
+          </p>
+          <p
+            className={`text-3xl font-extrabold tabular-nums ${
+              saldoMes.saldo < 0 ? "text-destructive" : "text-success"
+            }`}
+          >
+            {saldoMes.saldo >= 0 ? "+" : ""}
+            {fmtMin(saldoMes.saldo)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {carregando
+              ? "Carregando…"
+              : `${fmtMin(saldoMes.trab)} trabalhados de ${fmtMin(
+                  saldoMes.prev,
+                )} previstos em ${saldoMes.dias} dia(s) — mesmo cálculo do espelho`}
+          </p>
+        </CardContent>
+      </Card>
 
       {user ? (
         <SolicitarAjustes

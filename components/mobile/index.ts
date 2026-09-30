@@ -24,5 +24,6 @@ export { PageBackHeader } from "./page-back-header";
 export { PhotoUpload } from "./photo-upload";
 export { PontoScreen } from "./ponto-screen";
 export { ProfileScreen } from "./profile-screen";
+export { RelogioAoVivo } from "./relogio-ao-vivo";
 export { SectionHeading } from "./section-heading";
 export { SolicitarAjustes } from "./solicitar-ajustes";

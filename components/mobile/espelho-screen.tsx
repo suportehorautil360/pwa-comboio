@@ -21,26 +21,21 @@ import { formatarCpf, limparCpf } from "@/lib/ponto/cpf";
 import {
   ESPELHO_COLUNAS,
   ESPELHO_PESOS,
+  abonosDoMes as abonosDoMesDe,
   abonosNoPeriodo,
   construirEspelho,
   dataBr,
+  diasDoMes,
   diasNoIntervalo,
   diasNoPeriodo,
   intervaloPreset,
+  totaisDosDias,
   type PeriodoPreset,
 } from "@/lib/ponto/espelho";
 import { fmtMin, minutosPrevistos, minutosTrabalhados } from "@/lib/ponto/horas";
 import { baixarPDFTabela } from "@/lib/export/pdf-tabela";
 import { resolverLedger, type BatidaEfetiva } from "@/lib/ponto/resolver-ledger";
 import { getSessionUser, type SessionUser } from "@/lib/session";
-
-function diaLocal(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dia}`;
-}
 
 function horaDe(iso: string): string {
   return new Date(iso).toLocaleTimeString("pt-BR", {
@@ -133,57 +128,20 @@ export function EspelhoScreen() {
 
   const efetivas = useMemo(() => resolverLedger(todas), [todas]);
 
-  const abonosDoMes = useMemo(() => {
-    const cpf = limparCpf(user?.cpf ?? "");
-    const out = new Map<string, string | null | undefined>();
-    if (!cpf || !abonos.length) return out;
-    for (const a of abonos) {
-      if (limparCpf(a.funcionarioCpf) !== cpf) continue;
-      if (!a.data.startsWith(mes)) continue;
-      out.set(a.data, a.motivo);
-    }
-    return out;
-  }, [abonos, user, mes]);
+  const abonosDoMes = useMemo(
+    () => abonosDoMesDe(abonos, user?.cpf, mes),
+    [abonos, user, mes],
+  );
 
-  const diasMes = useMemo(() => {
-    const map = new Map<string, BatidaEfetiva[]>();
-    const [ano, mesNum] = mes.split("-").map(Number);
-    const agora = new Date();
-    const ehFuturo =
-      ano > agora.getFullYear() ||
-      (ano === agora.getFullYear() && mesNum > agora.getMonth() + 1);
-    const ehMesAtual =
-      ano === agora.getFullYear() && mesNum === agora.getMonth() + 1;
-    const ultimoDia = new Date(ano, mesNum, 0).getDate();
-    const diaLimite = ehFuturo ? 0 : ehMesAtual ? agora.getDate() : ultimoDia;
-    for (let d = 1; d <= diaLimite; d++) {
-      map.set(`${mes}-${String(d).padStart(2, "0")}`, []);
-    }
-    for (const b of efetivas) {
-      const dia = diaLocal(b.timestampOriginal);
-      if (!dia.startsWith(mes)) continue;
-      const arr = map.get(dia) ?? [];
-      arr.push(b);
-      map.set(dia, arr);
-    }
-    for (const data of abonosDoMes.keys()) {
-      if (!map.has(data)) map.set(data, []);
-    }
-    return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
-  }, [efetivas, abonosDoMes, mes]);
+  const diasMes = useMemo(
+    () => diasDoMes(efetivas, abonosDoMes, mes, new Date()),
+    [efetivas, abonosDoMes, mes],
+  );
 
-  const totais = useMemo(() => {
-    let trab = 0;
-    let prev = 0;
-    for (const [dia, bs] of diasMes) {
-      const trabBruto = minutosTrabalhados(bs, escala?.almocoMinutos ?? 0);
-      const previsto = minutosPrevistos(escala, dia);
-      const abonado = abonosDoMes.has(dia) && trabBruto < previsto;
-      trab += abonado ? previsto : trabBruto;
-      prev += previsto;
-    }
-    return { trab, prev, saldo: trab - prev };
-  }, [diasMes, escala, abonosDoMes]);
+  const totais = useMemo(
+    () => totaisDosDias(diasMes, abonosDoMes, escala),
+    [diasMes, escala, abonosDoMes],
+  );
 
   const presets = useMemo(() => {
     const hoje = new Date();

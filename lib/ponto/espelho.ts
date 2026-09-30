@@ -186,3 +186,78 @@ export function diasNoIntervalo(de: string, ate: string): number {
   const b = new Date(`${ate}T00:00:00`);
   return Math.round((b.getTime() - a.getTime()) / 86_400_000) + 1;
 }
+
+/** Abonos do funcionário (por CPF) no mês `yyyy-mm`: data → motivo. */
+export function abonosDoMes(
+  abonos: Abono[] | undefined,
+  cpfRaw: string | undefined,
+  mes: string,
+): Map<string, string | null | undefined> {
+  const out = new Map<string, string | null | undefined>();
+  const cpf = limparCpf(cpfRaw ?? "");
+  if (!cpf || !abonos?.length) return out;
+  for (const a of abonos) {
+    if (limparCpf(a.funcionarioCpf) !== cpf) continue;
+    if (!a.data.startsWith(mes)) continue;
+    out.set(a.data, a.motivo);
+  }
+  return out;
+}
+
+/**
+ * Dias do mês `yyyy-mm` até `agora` (mês futuro: nenhum; mês passado: todos),
+ * com as batidas de cada um e os dias só com abono. Mais recente primeiro — é
+ * a ordem da lista do espelho.
+ */
+export function diasDoMes<T extends PontoRegistro>(
+  batidas: T[],
+  abonosDias: Map<string, unknown>,
+  mes: string,
+  agora: Date,
+): [string, T[]][] {
+  const map = new Map<string, T[]>();
+  const [ano, mesNum] = mes.split("-").map(Number);
+  const ehFuturo =
+    ano > agora.getFullYear() ||
+    (ano === agora.getFullYear() && mesNum > agora.getMonth() + 1);
+  const ehMesAtual =
+    ano === agora.getFullYear() && mesNum === agora.getMonth() + 1;
+  const ultimoDia = new Date(ano, mesNum, 0).getDate();
+  const diaLimite = ehFuturo ? 0 : ehMesAtual ? agora.getDate() : ultimoDia;
+  for (let d = 1; d <= diaLimite; d++) {
+    map.set(`${mes}-${String(d).padStart(2, "0")}`, []);
+  }
+  for (const b of batidas) {
+    const dia = diaLocal(b.timestampOriginal);
+    if (!dia.startsWith(mes)) continue;
+    const arr = map.get(dia) ?? [];
+    arr.push(b);
+    map.set(dia, arr);
+  }
+  for (const data of abonosDias.keys()) {
+    if (!map.has(data)) map.set(data, []);
+  }
+  return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
+}
+
+/**
+ * Trabalhado, previsto e saldo (minutos) de uma lista de dias. Dia abonado com
+ * menos horas que o previsto conta como previsto. É o card de totais do
+ * espelho e o "Saldo do mês" do Meu ponto — o mesmo número nas duas telas.
+ */
+export function totaisDosDias(
+  dias: [string, PontoRegistro[]][],
+  abonosDias: Map<string, unknown>,
+  escala: Escala | null,
+): { trab: number; prev: number; saldo: number } {
+  let trab = 0;
+  let prev = 0;
+  for (const [dia, bs] of dias) {
+    const trabBruto = minutosTrabalhados(bs, escala?.almocoMinutos ?? 0);
+    const previsto = minutosPrevistos(escala, dia);
+    const abonado = abonosDias.has(dia) && trabBruto < previsto;
+    trab += abonado ? previsto : trabBruto;
+    prev += previsto;
+  }
+  return { trab, prev, saldo: trab - prev };
+}

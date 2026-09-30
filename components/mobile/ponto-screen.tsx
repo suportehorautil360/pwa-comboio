@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { FieldHeader } from "@/components/mobile/field-header";
 import { PhotoUpload } from "@/components/mobile/photo-upload";
+import { RelogioAoVivo } from "@/components/mobile/relogio-ao-vivo";
 import { Button } from "@/components/ui/button";
 import { featureFlagsApi } from "@/lib/api/feature-flags";
 import { enqueue, flushOutbox } from "@/lib/offline/outbox";
@@ -21,33 +22,6 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Falha ao ler a foto."));
     reader.readAsDataURL(file);
   });
-}
-
-function RelogioAoVivo() {
-  const [hora, setHora] = useState("");
-
-  useEffect(() => {
-    const tick = () =>
-      setHora(
-        new Date().toLocaleTimeString("pt-BR", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
-      );
-    queueMicrotask(tick);
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  return (
-    <div className="flex items-center justify-center gap-2 rounded-xl bg-muted/30 py-4">
-      <Clock className="size-5 text-brand" aria-hidden />
-      <span className="text-3xl font-semibold tabular-nums tracking-tight">
-        {hora || "--:--:--"}
-      </span>
-    </div>
-  );
 }
 
 export function PontoScreen() {
