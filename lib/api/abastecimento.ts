@@ -112,3 +112,27 @@ export async function ultimaLeituraAbastecimento(
   );
   return r.data?.ultimaLeitura ?? null;
 }
+
+/** Motivo de bloqueio do abastecimento por inspeção (item impeditivo reprovado). */
+export interface BloqueioAbastecimento {
+  bloqueado: boolean;
+  titulo?: string;
+  detalhe?: string;
+}
+
+/**
+ * A máquina está bloqueada por item IMPEDITIVO reprovado na inspeção (Fase 2
+ * das inspeções)? O back recusa o abastecimento com o mesmo motivo; consultar
+ * antes deixa o frentista ler o porquê assim que digita a placa, em vez de
+ * só ao salvar. `null` = livre (ou placa desconhecida).
+ */
+export async function bloqueioDoAbastecimento(
+  prefeituraId: string,
+  plateOrChassis: string,
+): Promise<BloqueioAbastecimento | null> {
+  const qs = new URLSearchParams({ plateOrChassis });
+  const r = await api.get<{ data: BloqueioAbastecimento }>(
+    `/abastecimentos/bloqueio/${prefeituraId}?${qs.toString()}`,
+  );
+  return r.data?.bloqueado ? r.data : null;
+}

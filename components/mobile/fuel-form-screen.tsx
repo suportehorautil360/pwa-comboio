@@ -24,7 +24,9 @@ import {
 } from "@/components/ui/select";
 import { ComboioSelect } from "@/components/mobile/comboio-select";
 import {
+  bloqueioDoAbastecimento,
   ehComboioTipo,
+  type BloqueioAbastecimento,
   filtrarEquipamentosDiesel,
   tetoAbastecimento,
   ultimaLeituraAbastecimento,
@@ -96,6 +98,8 @@ export function FuelFormScreen() {
   const [sucesso, setSucesso] = useState("");
   // Maior leitura já registrada p/ o equipamento (busca no back ao escolher).
   const [ultimaLeitura, setUltimaLeitura] = useState<number | null>(null);
+  // Fase 2 das inspeções: máquina bloqueada por item impeditivo reprovado.
+  const [bloqueio, setBloqueio] = useState<BloqueioAbastecimento | null>(null);
 
   const readingUnit = measurement === "horimetro" ? "h" : "km";
 
@@ -224,6 +228,37 @@ export function FuelFormScreen() {
     };
   }, [equipment, measurement, user?.prefeituraId]);
 
+  // Consulta o bloqueio por inspeção junto com a última leitura (mesmo
+  // debounce). Só online; offline o back recusa na sincronização com o mesmo
+  // motivo.
+  useEffect(() => {
+    const placa = equipment.trim();
+    const pid = user?.prefeituraId;
+    const online = typeof navigator === "undefined" || navigator.onLine;
+    let ativo = true;
+    if (!pid || placa.length < 2 || !online) {
+      queueMicrotask(() => {
+        if (ativo) setBloqueio(null);
+      });
+      return () => {
+        ativo = false;
+      };
+    }
+    const t = setTimeout(() => {
+      void bloqueioDoAbastecimento(pid, placa)
+        .then((b) => {
+          if (ativo) setBloqueio(b);
+        })
+        .catch(() => {
+          if (ativo) setBloqueio(null);
+        });
+    }, 400);
+    return () => {
+      ativo = false;
+      clearTimeout(t);
+    };
+  }, [equipment, user?.prefeituraId]);
+
   function trocarComboio(id: string) {
     setComboioId(id);
     setComboioSelecionado(id);
@@ -236,6 +271,10 @@ export function FuelFormScreen() {
 
     if (!equipment.trim()) {
       setErro("Informe a placa ou chassi do equipamento.");
+      return;
+    }
+    if (bloqueio) {
+      setErro(`${bloqueio.titulo ?? "Máquina bloqueada"}. Abastecimento não liberado.`);
       return;
     }
     if (!(litrosNum > 0)) {
@@ -365,6 +404,22 @@ export function FuelFormScreen() {
               Abastecendo o tanque do caminhão do comboio.
             </p>
           ) : null}
+          {bloqueio ? (
+            <div
+              role="alert"
+              data-testid="bloqueio-inspecao"
+              className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-xs"
+            >
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+              <div>
+                <p className="font-semibold text-destructive">
+                  {bloqueio.titulo ?? "Máquina bloqueada por inspeção"}
+                </p>
+                {bloqueio.detalhe ? <p className="mt-0.5">{bloqueio.detalhe}</p> : null}
+                <p className="mt-0.5 font-medium">Abastecimento não liberado.</p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-2">
@@ -492,7 +547,7 @@ export function FuelFormScreen() {
             type="submit"
             variant="brand"
             className="h-12 w-full text-sm font-semibold uppercase tracking-wide"
-            disabled={isSaving || semSaldo || acimaCapacidade || leituraInvalida}
+            disabled={isSaving || semSaldo || acimaCapacidade || leituraInvalida || Boolean(bloqueio)}
           >
             {isSaving ? "Salvando…" : "Salvar abastecimento"}
           </Button>
