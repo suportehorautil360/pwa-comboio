@@ -16,12 +16,14 @@ import { db, type OutboxItem } from "../db";
 import {
   backoffDelay,
   discardItem,
+  ehRejeicaoDefinitiva,
   enqueue,
   flushOutbox,
   getCounts,
   itemParaLancamento,
   listItems,
   MAX_ATTEMPTS,
+  migrarRotasAntigas,
   retryItem,
   submit,
 } from "./outbox";
@@ -163,6 +165,8 @@ describe("submit", () => {
   });
 });
 
+// `editar-ponto` é um kind legado (a correção agora é uma solicitação), mas o
+// path explícito no enqueue continua valendo para qualquer kind.
 describe("enqueue com path dinâmico (editar-ponto)", () => {
   beforeEach(async () => {
     post.mockReset();
@@ -254,5 +258,141 @@ describe("retryItem / discardItem (dead-letter UI)", () => {
     await seed({ id: "d", failed: true });
     await discardItem("d");
     expect(await db.outbox.get("d")).toBeUndefined();
+  });
+});
+
+// A rota de batida aceita 10 requisições por minuto. Uma fila com mais batidas
+// que isso (dias sem sinal) não pode mandar o excedente para os erros.
+describe("limite de requisições (429)", () => {
+  beforeEach(async () => {
+    post.mockReset();
+    await db.outbox.clear();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("flush: não é erro do item — espera, não gasta tentativa e para o lote", async () => {
+    await seed({ id: "a", createdAt: 1, attempts: 2 });
+    await seed({ id: "b", createdAt: 2 });
+    post.mockRejectedValueOnce(new ApiError(429, "ThrottlerException: Too Many Requests"));
+    const antes = Date.now();
+
+    await flushOutbox();
+
+    const a = await db.outbox.get("a");
+    expect(a?.failed).toBeFalsy();
+    expect(a?.attempts).toBe(2);
+    expect(a?.nextAttemptAt).toBeGreaterThanOrEqual(antes + 60_000);
+    // O segundo nem foi tentado: bateria no mesmo limite.
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(await db.outbox.get("b")).toBeDefined();
+  });
+
+  it("nem no último fôlego vira dead-letter por causa do limite", async () => {
+    await seed({ id: "a", attempts: MAX_ATTEMPTS - 1 });
+    post.mockRejectedValueOnce(new ApiError(429, "Too Many Requests"));
+    await flushOutbox();
+    expect((await db.outbox.get("a"))?.failed).toBeFalsy();
+  });
+
+  it("submit: enfileira em vez de mostrar erro e perder o lançamento", async () => {
+    post.mockRejectedValueOnce(new ApiError(429, "Too Many Requests"));
+    const r = await submit("ponto", { tipo: "entrada" });
+    expect(r).toEqual({ synced: false });
+    expect((await getCounts()).pendentes).toBe(1);
+  });
+
+  it("ehRejeicaoDefinitiva separa o que adianta reenviar do que não adianta", () => {
+    for (const status of [400, 401, 403, 404, 422]) {
+      expect(ehRejeicaoDefinitiva(new ApiError(status, "x"))).toBe(true);
+    }
+    for (const status of [408, 409, 429, 500, 503]) {
+      expect(ehRejeicaoDefinitiva(new ApiError(status, "x"))).toBe(false);
+    }
+    expect(ehRejeicaoDefinitiva(new TypeError("Failed to fetch"))).toBe(false);
+  });
+});
+
+// O back removeu `/time-records` (404). A batida feita sem sinal ia para os
+// erros de sincronização e nunca chegava ao RH. Ela tem de subir pela rota
+// nova sozinha, sem o comboísta refazer nada.
+describe("batida presa na rota antiga do ponto", () => {
+  const BATIDA = {
+    name: "João Comboísta",
+    photo: "data:image/jpeg;base64,AAAA",
+    prefeituraId: "pref-1",
+    timestampOriginal: "2026-09-28T10:00:00.000Z",
+    tipo: "entrada",
+    cpf: "12345678901",
+  };
+
+  beforeEach(async () => {
+    post.mockReset();
+    await db.outbox.clear();
+    vi.stubGlobal("navigator", { onLine: true });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("batida nova já nasce na rota que existe", async () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    await enqueue("ponto", BATIDA);
+    const [item] = await listItems();
+    expect(item.path).toBe("/checklist/bater-ponto");
+  });
+
+  it("o flush tira a batida dos erros e a envia pela rota nova, com a mesma chave", async () => {
+    await seed({
+      id: "presa",
+      kind: "ponto",
+      path: "/time-records",
+      payload: BATIDA,
+      failed: true,
+      attempts: 1,
+      idempotencyKey: "chave-presa",
+      lastError: "Cannot POST /time-records",
+    });
+    post.mockResolvedValueOnce({ data: { id: "pk-1" } });
+
+    await flushOutbox();
+
+    expect(post).toHaveBeenCalledTimes(1);
+    const [path, corpo, opts] = post.mock.calls[0] as [
+      string,
+      unknown,
+      { idempotencyKey?: string },
+    ];
+    expect(path).toBe("/checklist/bater-ponto");
+    // O horário é o que a pessoa bateu, não o de agora.
+    expect(corpo).toEqual(BATIDA);
+    expect(opts.idempotencyKey).toBe("chave-presa");
+    expect(await db.outbox.get("presa")).toBeUndefined();
+    expect(await getCounts()).toEqual({ pendentes: 0, falhos: 0 });
+  });
+
+  it("sem sinal, a batida continua guardada — nada se perde", async () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    await seed({ id: "presa", kind: "ponto", path: "/time-records", payload: BATIDA, failed: true });
+
+    await flushOutbox();
+
+    expect(post).not.toHaveBeenCalled();
+    expect(await db.outbox.get("presa")).toBeDefined();
+  });
+
+  it("migrarRotasAntigas não mexe numa fila que não tem item antigo", async () => {
+    await seed({ id: "ok" });
+    expect(await migrarRotasAntigas()).toBe(0);
+    expect((await db.outbox.get("ok"))?.path).toBe("/abastecimentos");
+  });
+
+  it("os outros lançamentos presos por erro de verdade continuam nos erros", async () => {
+    await seed({ id: "ruim", failed: true, lastError: "payload inválido" });
+    await seed({ id: "presa", kind: "ponto", path: "/time-records", payload: BATIDA, failed: true });
+    post.mockResolvedValueOnce({ data: { id: "pk-1" } });
+
+    await flushOutbox();
+
+    expect((await db.outbox.get("ruim"))?.failed).toBe(true);
+    expect(await db.outbox.get("presa")).toBeUndefined();
   });
 });

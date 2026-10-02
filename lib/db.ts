@@ -24,7 +24,7 @@ export type OutboxKind =
 export interface OutboxItem {
   id: string;
   kind: OutboxKind;
-  /** Endpoint resolvido (suporta path dinâmico, ex.: /time-records/update/:id). */
+  /** Endpoint resolvido no enqueue (um kind pode ter path dinâmico). */
   path: string;
   method: "POST" | "PATCH";
   payload: unknown;
@@ -49,7 +49,7 @@ export interface MetaRow {
 
 /**
  * Cache de leitura (read-through). Uma linha por consulta, chave namespaced
- * (ex.: `equipamentos:<pref>`, `time-records:<pref>`). `data` é a resposta já
+ * (ex.: `equipamentos:<pref>`, `ponto:<pref>:<pessoa>`). `data` é a resposta já
  * normalizada do NestJS; `cachedAt` alimenta o TTL/stale-while-revalidate.
  */
 export interface CacheRow {
@@ -59,14 +59,19 @@ export interface CacheRow {
 }
 
 /**
- * Paths estáticos por kind. `editar-ponto` é `null` porque o endpoint carrega o
- * id da batida (`/time-records/update/:id`) — o path é resolvido no enqueue.
+ * Paths estáticos por kind.
+ *
+ * `ponto` vai para `/checklist/bater-ponto` — a rota de batida que o back tem
+ * hoje (a `/time-records` foi removida e responde 404). `editar-ponto` é um
+ * kind LEGADO: a correção de horário agora é uma `solicitacao` com
+ * `tipo: "corrigir"`. O kind continua existindo só para os itens antigos que
+ * ainda estiverem na fila de algum aparelho — ver `lib/offline/migrar-rotas`.
  */
 export const OUTBOX_PATHS: Record<OutboxKind, string | null> = {
   abastecimento: "/abastecimentos",
   lubrificacao: "/lubrificacoes",
   reabastecimento: "/reabastecimentos",
-  ponto: "/time-records",
+  ponto: "/checklist/bater-ponto",
   solicitacao: "/solicitacoes-ponto",
   "editar-ponto": null,
 };

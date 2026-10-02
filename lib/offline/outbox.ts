@@ -11,6 +11,9 @@
  */
 import { api, ApiError } from "../api/client";
 import { db, OUTBOX_PATHS, type OutboxItem, type OutboxKind } from "../db";
+import { guardarBatidaEnviada } from "../ponto/cache-batidas";
+import { getSessionUser } from "../session";
+import { migrarFila, precisaMigrar } from "./migrar-rotas";
 
 export type { OutboxItem, OutboxKind } from "../db";
 
@@ -54,6 +57,26 @@ export function backoffDelay(attempts: number): number {
   const exp = Math.min(BASE_DELAY * 2 ** (attempts - 1), MAX_DELAY);
   const jitter = 0.8 + Math.random() * 0.4;
   return Math.round(exp * jitter);
+}
+
+/** Espera depois de um 429 (limite de requisições): a janela do back é de 1 min. */
+const ESPERA_LIMITE_DE_TAXA = 60_000;
+
+/**
+ * Rejeição definitiva do servidor: reenviar daria o mesmo erro. 409 (ainda
+ * processando), 408 e 429 (limite de requisições) são transitórios — o 429
+ * importa no ponto: a rota de batida aceita 10 por minuto, e uma fila com mais
+ * batidas que isso (dias sem sinal) não pode mandar o excedente para os erros.
+ */
+export function ehRejeicaoDefinitiva(e: unknown): boolean {
+  return (
+    e instanceof ApiError &&
+    e.status >= 400 &&
+    e.status < 500 &&
+    e.status !== 408 &&
+    e.status !== 409 &&
+    e.status !== 429
+  );
 }
 
 // ---------- Helpers ----------
@@ -118,8 +141,8 @@ export async function enqueue(
  * se sincronizou agora (mensagem precisa, não "salvo quando der sinal").
  *
  * - online + 2xx → `{ synced: true }` (nada vai para a fila)
- * - 4xx (validação/sessão/saldo, ≠409) → lança `ApiError` (a tela mostra o erro)
- * - 409 "processando", 5xx, rede ou offline → enfileira e devolve `{ synced: false }`
+ * - 4xx (validação/sessão/saldo, ≠408/409/429) → lança `ApiError` (a tela mostra o erro)
+ * - 409 "processando", 429, 5xx, rede ou offline → enfileira e devolve `{ synced: false }`
  */
 export async function submit(
   kind: OutboxKind,
@@ -133,18 +156,14 @@ export async function submit(
 
   if (online) {
     try {
-      await sendItem({ path, method, payload, idempotencyKey });
+      const resposta = await sendItem({ path, method, payload, idempotencyKey });
+      await aoEnviar(kind, resposta);
       return { synced: true };
     } catch (e) {
-      const definitivo =
-        e instanceof ApiError &&
-        e.status >= 400 &&
-        e.status < 500 &&
-        e.status !== 409;
       // Rejeição definitiva (ex.: saldo insuficiente, sessão): não enfileira —
       // reenviar daria o mesmo erro. A tela mostra a mensagem.
-      if (definitivo) throw e;
-      // 409 transitório, 5xx ou falha de rede: salva offline e segue.
+      if (ehRejeicaoDefinitiva(e)) throw e;
+      // 409/429 transitório, 5xx ou falha de rede: salva offline e segue.
     }
   }
 
@@ -267,37 +286,78 @@ function sendItem(item: {
     : api.post(item.path, item.payload, opts);
 }
 
+/** O que fazer com a resposta de um envio que deu certo. Nunca derruba o envio. */
+async function aoEnviar(kind: OutboxKind, resposta: unknown): Promise<void> {
+  if (kind !== "ponto") return;
+  try {
+    await guardarBatidaEnviada(resposta);
+  } catch {
+    /* a folha se acerta na próxima leitura do servidor */
+  }
+}
+
+/**
+ * Reescreve os itens que apontam para rotas removidas do back (o ponto antigo,
+ * `/time-records`) para as de hoje — ver {@link migrarFila}. Barato quando não
+ * há o que migrar, e é o caso normal.
+ */
+export async function migrarRotasAntigas(): Promise<number> {
+  const todos = await listAll();
+  if (!todos.some(precisaMigrar)) return 0;
+  const u = getSessionUser();
+  const mudados = migrarFila(
+    todos,
+    u ? { prefeituraId: u.prefeituraId, nome: u.nome, cpf: u.cpf } : null,
+  );
+  if (mudados.length === 0) return 0;
+  await db.outbox.bulkPut(mudados);
+  notify();
+  return mudados.length;
+}
+
 let sincronizando = false;
 
 /**
  * Tenta enviar os itens pendentes ao back. Best-effort, não lança.
  * - 2xx → remove da fila.
- * - 4xx (≠409) → dead-letter (`failed`), segue para o próximo.
- * - 5xx/409/rede → incrementa tentativa e agenda backoff; estoura MAX_ATTEMPTS
- *   vira dead-letter. Para o lote (rede provavelmente caiu para todos).
+ * - 4xx (≠408/409/429) → dead-letter (`failed`), segue para o próximo.
+ * - 429 → espera 1 min sem gastar tentativa e para o lote.
+ * - 5xx/408/409/rede → incrementa tentativa e agenda backoff; estoura
+ *   MAX_ATTEMPTS vira dead-letter. Para o lote (rede provavelmente caiu).
+ *
+ * Antes de enviar, migra os itens gravados para rotas que o back removeu.
  */
 export async function flushOutbox(): Promise<void> {
   if (sincronizando) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   sincronizando = true;
   try {
+    await migrarRotasAntigas();
     const agora = Date.now();
     const elegiveis = (await listAll()).filter(
       (i) => !i.failed && i.nextAttemptAt <= agora,
     );
     for (const item of elegiveis) {
       try {
-        await sendItem(item);
+        const resposta = await sendItem(item);
+        // A folha recebe a batida ANTES de ela sair da fila: sem intervalo em
+        // que a linha do dia apareça como "Sem registro".
+        await aoEnviar(item.kind, resposta);
         await db.outbox.delete(item.id);
         notify();
       } catch (e) {
-        const definitivo =
-          e instanceof ApiError &&
-          e.status >= 400 &&
-          e.status < 500 &&
-          e.status !== 409;
         const msg = e instanceof Error ? e.message : "erro de envio";
-        if (definitivo) {
+        if (e instanceof ApiError && e.status === 429) {
+          // Limite de requisições: não é falha do item e não gasta tentativa.
+          // Espera a janela do servidor e para o lote.
+          await db.outbox.update(item.id, {
+            nextAttemptAt: Date.now() + ESPERA_LIMITE_DE_TAXA,
+            lastError: msg,
+          });
+          notify();
+          break;
+        }
+        if (ehRejeicaoDefinitiva(e)) {
           // Rejeição do servidor (validação/sessão): dead-letter e segue.
           await db.outbox.update(item.id, {
             failed: true,

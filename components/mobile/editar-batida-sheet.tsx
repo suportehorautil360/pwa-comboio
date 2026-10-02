@@ -25,8 +25,8 @@ function comNovaHora(iso: string, hhmm: string): string {
 }
 
 /**
- * Solicita correção de horário de uma batida existente. Cria um ajuste no
- * ledger (pendente de aprovação) — não altera a batida original.
+ * Solicita correção de horário de uma batida existente. Vira uma solicitação
+ * para o RH (pendente de aprovação) — não altera a batida original.
  */
 export function EditarBatidaSheet({
   batida,
@@ -35,7 +35,8 @@ export function EditarBatidaSheet({
 }: {
   batida: PontoRegistro | null;
   onClose: () => void;
-  onSalvo: () => void;
+  /** `enviado`: chegou ao RH agora; `false` = ficou no aparelho, sobe sozinho. */
+  onSalvo: (enviado: boolean) => void;
 }) {
   const [novaHora, setNovaHora] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -53,16 +54,20 @@ export function EditarBatidaSheet({
 
   async function salvar() {
     if (!batida || !novaHora) return;
+    if (novaHora === horaInput(batida.timestampOriginal)) {
+      setErro("O novo horário é igual ao atual.");
+      return;
+    }
     setErro("");
     setSalvando(true);
     try {
-      await pontoApi.editarHorario(
+      const { synced } = await pontoApi.editarHorario(
         batida.id,
         comNovaHora(batida.timestampOriginal, novaHora),
         motivo,
       );
       setSalvando(false);
-      onSalvo();
+      onSalvo(synced);
     } catch {
       setSalvando(false);
       setErro("Não foi possível enviar a correção. Verifique a conexão.");

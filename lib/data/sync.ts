@@ -28,8 +28,8 @@ import { solicitacoesPontoApi } from "../api/solicitacoes-ponto";
 import { provisionarRoster } from "../auth/roster";
 import { flushOutbox } from "../offline/outbox";
 import type { SessionUser } from "../session";
-import { cacheEntry, cachePut, isStale } from "./cache";
-import { cacheKeys } from "./cache-keys";
+import { cacheEntry, cachePut, isStale, limparCachesAntigos } from "./cache";
+import { cacheKeys, quemDaSessao } from "./cache-keys";
 
 const MIN = 60_000;
 const HORA = 60 * MIN;
@@ -80,7 +80,7 @@ const RESOURCES: Resource[] = [
     ttl: 2 * MIN,
   },
   {
-    key: (u) => cacheKeys.timeRecords(u.prefeituraId),
+    key: (u) => cacheKeys.ponto(u.prefeituraId, quemDaSessao(u)),
     fetch: (u) => pontoApi.listar(u.prefeituraId),
     ttl: 2 * MIN,
   },
@@ -100,8 +100,9 @@ const RESOURCES: Resource[] = [
     ttl: DIA,
   },
   {
-    key: (u) => cacheKeys.solicitacoes(u.prefeituraId),
-    fetch: (u) => solicitacoesPontoApi.listar(u.prefeituraId),
+    key: (u) => cacheKeys.solicitacoes(u.prefeituraId, quemDaSessao(u)),
+    fetch: (u) =>
+      solicitacoesPontoApi.listar(u.prefeituraId, { cpf: u.cpf, nome: u.nome }),
     ttl: 5 * MIN,
   },
 ];
@@ -155,6 +156,9 @@ export async function syncAll(
   opts?: { force?: boolean },
 ): Promise<void> {
   await flushOutbox();
+  // Caches de versões antigas guardavam o ponto e as solicitações da EMPRESA
+  // inteira. Sai do aparelho na primeira sincronização da versão nova.
+  await limparCachesAntigos().catch(() => undefined);
   if (!user) return;
   const online = typeof navigator === "undefined" || navigator.onLine;
   if (!online || sincronizando) return;

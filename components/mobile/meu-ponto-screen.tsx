@@ -29,11 +29,16 @@ import {
   useAbonos,
   useEmpresa,
   useEscala,
-  useTimeRecords,
+  usePontoRegistros,
+  useSolicitacoes,
 } from "@/lib/data/queries";
 import { submit } from "@/lib/offline/outbox";
 import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
+import {
+  aplicarCorrecoesPendentes,
+  correcoesNaFila,
+} from "@/lib/ponto/ajustes-pendentes";
 import { limparCpf } from "@/lib/ponto/cpf";
 import { baixarCRPT, montarCRPT, podeEmitirCRPT } from "@/lib/ponto/crpt";
 import { abonosDoMes, diasDoMes, totaisDosDias } from "@/lib/ponto/espelho";
@@ -130,7 +135,9 @@ export function MeuPontoScreen() {
     data: recordsData,
     loading: loadingRecords,
     refetch: recarregar,
-  } = useTimeRecords(user?.prefeituraId);
+  } = usePontoRegistros(user);
+  const { data: solicitacoesData, refetch: recarregarSolicitacoes } =
+    useSolicitacoes(user);
   const { data: empresaData } = useEmpresa(user?.prefeituraId);
   const { data: escalaData } = useEscala(user?.prefeituraId);
   const { data: abonosData } = useAbonos(user?.prefeituraId);
@@ -153,7 +160,9 @@ export function MeuPontoScreen() {
     () =>
       user
         ? mesclarBatidas(
-            (recordsData ?? []).filter((r) => ehDoOperador(r, user)),
+            // As do servidor já vêm recortadas pela pessoa do token; a fila é
+            // do aparelho, e pode ter batida de quem usou antes.
+            recordsData ?? [],
             pendentes.filter((b) => ehDoOperador(b, user)),
           )
         : [],
@@ -169,7 +178,16 @@ export function MeuPontoScreen() {
     queueMicrotask(() => setUser(u));
   }, [router]);
 
-  const efetivas = useMemo(() => resolverLedger(todas), [todas]);
+  // A folha do servidor mais os pedidos de correção em aberto — os que o RH
+  // ainda não avaliou e os que nem saíram do aparelho.
+  const efetivas = useMemo(
+    () =>
+      aplicarCorrecoesPendentes(resolverLedger(todas), [
+        ...(solicitacoesData ?? []),
+        ...correcoesNaFila(raw),
+      ]),
+    [todas, solicitacoesData, raw],
+  );
 
   const porTipoHoje = useMemo(() => {
     const m = new Map<TipoPonto, BatidaEfetiva>();
@@ -543,7 +561,10 @@ export function MeuPontoScreen() {
           nome={user.nome}
           cpf={user.cpf}
           batidas={efetivas}
-          onEnviado={() => recarregar()}
+          onEnviado={() => {
+            recarregar();
+            recarregarSolicitacoes();
+          }}
         />
       ) : null}
 
@@ -592,10 +613,15 @@ export function MeuPontoScreen() {
       <EditarBatidaSheet
         batida={editando}
         onClose={() => setEditando(null)}
-        onSalvo={() => {
+onSalvo={(enviado) => {
           setEditando(null);
-          setSucesso("Correção enviada — pendente de aprovação do gestor.");
+          setSucesso(
+            enviado
+              ? "Correção enviada — pendente de aprovação do gestor."
+              : "Correção salva no aparelho — vai ao gestor ao reconectar.",
+          );
           recarregar();
+          recarregarSolicitacoes();
         }}
       />
     </div>

@@ -30,7 +30,8 @@ import {
   solicitacoesPontoApi,
   type SolicitacaoPonto,
 } from "../api/solicitacoes-ponto";
-import { cacheKeys } from "./cache-keys";
+import type { SessionUser } from "../session";
+import { cacheKeys, quemDaSessao } from "./cache-keys";
 import { useCached, type CachedResult } from "./use-cached";
 
 const MIN = 60_000;
@@ -92,13 +93,19 @@ export function useHistorico(
   );
 }
 
-/** Batidas de ponto da prefeitura (o front filtra pelo operador). */
-export function useTimeRecords(
-  prefeituraId?: string,
+/** Só o que os hooks por pessoa precisam da sessão. */
+type Pessoa = Pick<
+  SessionUser,
+  "prefeituraId" | "funcionarioId" | "cpf" | "usuario" | "nome"
+>;
+
+/** Batidas de ponto de quem está logado (o servidor recorta pelo token). */
+export function usePontoRegistros(
+  user?: Pessoa | null,
 ): CachedResult<PontoRegistro[]> {
   return useCached(
-    cacheKeys.timeRecords(prefeituraId),
-    () => pontoApi.listar(prefeituraId!),
+    cacheKeys.ponto(user?.prefeituraId, user ? quemDaSessao(user) : undefined),
+    () => pontoApi.listar(user!.prefeituraId),
     { ttl: 2 * MIN },
   );
 }
@@ -134,13 +141,20 @@ export function useEmpresa(
   );
 }
 
-/** Solicitações de ajuste de ponto do operador. */
+/** Solicitações de ajuste de ponto de quem está logado. */
 export function useSolicitacoes(
-  prefeituraId?: string,
+  user?: Pessoa | null,
 ): CachedResult<SolicitacaoPonto[]> {
   return useCached(
-    cacheKeys.solicitacoes(prefeituraId),
-    () => solicitacoesPontoApi.listar(prefeituraId!),
+    cacheKeys.solicitacoes(
+      user?.prefeituraId,
+      user ? quemDaSessao(user) : undefined,
+    ),
+    () =>
+      solicitacoesPontoApi.listar(user!.prefeituraId, {
+        cpf: user!.cpf,
+        nome: user!.nome,
+      }),
     { ttl: 5 * MIN },
   );
 }

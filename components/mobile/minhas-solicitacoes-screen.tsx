@@ -25,6 +25,7 @@ import { getSessionUser, type SessionUser } from "@/lib/session";
 const TIPO_LABEL: Record<TipoSolicitacao, string> = {
   incluir: "Incluir batida",
   cancelar: "Cancelar batida",
+  corrigir: "Corrigir horário",
   abono: "Solicitar abono",
   mensagem: "Mensagem ao gestor",
 };
@@ -79,7 +80,7 @@ export function MinhasSolicitacoesScreen() {
   const [anexo, setAnexo] = useState<string | null>(null);
 
   // Leitura offline-first: lista cacheada na hora, revalida em background.
-  const { data, loading: carregando } = useSolicitacoes(user?.prefeituraId);
+  const { data, loading: carregando } = useSolicitacoes(user);
   const lista = useMemo<SolicitacaoPonto[]>(() => data ?? [], [data]);
 
   useEffect(() => {
@@ -160,7 +161,7 @@ export function MinhasSolicitacoesScreen() {
                 <CardContent className="space-y-2 pt-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold">
-                      {TIPO_LABEL[s.tipo]}
+                      {TIPO_LABEL[s.tipo] ?? "Solicitação"}
                     </span>
                     <span
                       className={`flex items-center gap-1 text-xs font-medium ${STATUS_COR[s.status]}`}
@@ -173,6 +174,9 @@ export function MinhasSolicitacoesScreen() {
                   <div className="space-y-1 text-xs text-muted-foreground">
                     {s.tipo === "incluir" && s.timestampOriginal ? (
                       <p>Batida pedida: {fmtDataHora(s.timestampOriginal)}</p>
+                    ) : null}
+                    {s.tipo === "corrigir" && s.timestampOriginal ? (
+                      <p>Novo horário pedido: {fmtDataHora(s.timestampOriginal)}</p>
                     ) : null}
                     {s.tipo === "abono" && s.data ? (
                       <p>Dia: {fmtDiaIso(s.data)}</p>

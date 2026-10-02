@@ -33,7 +33,8 @@ describe("legacyToEvent (migração outbox v1 → v2)", () => {
       idempotencyKey: "key-123",
       failed: true,
     });
-    expect(ev.path).toBe("/time-records");
+    // Batida herdada do banco v1 já nasce na rota que o back tem hoje.
+    expect(ev.path).toBe("/checklist/bater-ponto");
     expect(ev.idempotencyKey).toBe("key-123");
     expect(ev.failed).toBe(true);
     expect(ev.attempts).toBe(2);

@@ -4,6 +4,7 @@
  * primeiro (offline-first) enquanto revalidam em background — ver {@link useCached}.
  */
 import { db } from "../db";
+import { PREFIXOS_ANTIGOS } from "./cache-keys";
 
 // --- Pub/sub: avisa quem está montado quando uma chave é regravada (ex.: o
 // syncAll atualizou o cache em background). Sem isso, a tela montada não re-lê
@@ -50,4 +51,28 @@ export async function cacheEntry<T>(
 /** true quando o cache está vencido (ou não existe) para o TTL informado. */
 export function isStale(cachedAt: number | undefined, ttl: number): boolean {
   return cachedAt === undefined || Date.now() - cachedAt > ttl;
+}
+
+/**
+ * Troca o dado de uma chave SEM mexer no carimbo de tempo: o cache continua
+ * tão velho quanto era, e a próxima revalidação acontece no prazo de sempre.
+ * Para emendas locais (ex.: a batida que acabou de subir) — não é resposta do
+ * servidor e não pode fazer o cache parecer fresco.
+ */
+export async function cachePatch<T>(
+  key: string,
+  mudar: (atual: T | undefined) => T | undefined,
+): Promise<void> {
+  const row = await db.cache.get(key);
+  const novo = mudar(row?.data as T | undefined);
+  if (novo === undefined) return;
+  await db.cache.put({ key, data: novo, cachedAt: row?.cachedAt ?? 0 });
+  notify(key);
+}
+
+/** Apaga do aparelho os caches de chaves que o app não usa mais. */
+export async function limparCachesAntigos(): Promise<void> {
+  for (const prefixo of PREFIXOS_ANTIGOS) {
+    await db.cache.where("key").startsWith(prefixo).delete();
+  }
 }

@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cacheGet } from "./cache";
-import { cacheKeys } from "./cache-keys";
+import { cacheKeys, PREFIXOS_ANTIGOS, quemDaSessao } from "./cache-keys";
 import { revalidarFrota, shouldSync } from "./sync";
 import type { SessionUser } from "../session";
 
@@ -25,13 +25,33 @@ describe("cacheKeys (contrato compartilhado hooks ↔ orquestrador)", () => {
     expect(cacheKeys.comboios("p1", "f1")).toBe("comboios:p1:f1");
     expect(cacheKeys.equipamentos("p1")).toBe("equipamentos:p1");
     expect(cacheKeys.ultimos("p1")).toBe("ultimos:p1:6");
-    expect(cacheKeys.timeRecords("p1")).toBe("time-records:p1");
-    expect(cacheKeys.solicitacoes("p1")).toBe("solicitacoes:p1");
+    // Ponto e solicitações são por PESSOA: a rota devolve só as de quem está
+    // logado, e a folha de um não pode aparecer para outro no mesmo aparelho.
+    expect(cacheKeys.ponto("p1", "f1")).toBe("ponto:p1:f1");
+    expect(cacheKeys.solicitacoes("p1", "f1")).toBe("minhas-solicitacoes:p1:f1");
+  });
+
+  it("as chaves novas não caem nos prefixos antigos, que são apagados", () => {
+    for (const chave of [
+      cacheKeys.ponto("p1", "f1"),
+      cacheKeys.solicitacoes("p1", "f1"),
+    ]) {
+      expect(PREFIXOS_ANTIGOS.some((p) => chave!.startsWith(p))).toBe(false);
+    }
+  });
+
+  it("identifica a pessoa pelo funcionarioId, depois CPF, depois login", () => {
+    expect(quemDaSessao({ funcionarioId: "f1", cpf: "1", usuario: "u" })).toBe("f1");
+    expect(quemDaSessao({ cpf: "1", usuario: "u" })).toBe("1");
+    expect(quemDaSessao({ usuario: "u" })).toBe("u");
+    expect(quemDaSessao({})).toBeUndefined();
   });
 
   it("devolve null quando faltam parâmetros (não busca)", () => {
     expect(cacheKeys.comboios("p1", undefined)).toBeNull();
     expect(cacheKeys.equipamentos(undefined)).toBeNull();
+    expect(cacheKeys.ponto("p1", undefined)).toBeNull();
+    expect(cacheKeys.solicitacoes(undefined, "f1")).toBeNull();
   });
 });
 

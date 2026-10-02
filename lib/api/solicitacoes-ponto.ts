@@ -1,12 +1,18 @@
 /**
  * Solicitações de ajuste de ponto (módulo solicitacoes-ponto do back-360-).
- * Um recurso atende incluir / cancelar / abono / mensagem.
+ * Um recurso atende incluir / cancelar / corrigir / abono / mensagem.
  */
 import { submit, type SubmitResult } from "../offline/outbox";
 import { api } from "./client";
 import type { TipoPonto } from "./ponto";
 
-export type TipoSolicitacao = "incluir" | "cancelar" | "abono" | "mensagem";
+export type TipoSolicitacao =
+  | "incluir"
+  | "cancelar"
+  /** Corrigir o horário de uma batida: `batidaId` + `timestampOriginal` (o novo). */
+  | "corrigir"
+  | "abono"
+  | "mensagem";
 export type StatusSolicitacao = "pendente" | "aprovado" | "reprovado";
 
 export interface SolicitacaoPonto {
@@ -54,9 +60,21 @@ export const solicitacoesPontoApi = {
     return submit("solicitacao", input);
   },
 
-  async listar(prefeituraId: string): Promise<SolicitacaoPonto[]> {
+  /**
+   * As solicitações de QUEM está logado. O recorte vai na consulta (`?cpf=` ou,
+   * sem CPF, `?nome=`): sem ele a rota devolve as da empresa inteira — nome,
+   * CPF e atestado dos colegas — e isso ficaria guardado neste aparelho.
+   */
+  async listar(
+    prefeituraId: string,
+    quem: { cpf?: string; nome?: string },
+  ): Promise<SolicitacaoPonto[]> {
+    const cpf = (quem.cpf ?? "").replace(/\D/g, "");
+    const recorte = cpf
+      ? `cpf=${cpf}`
+      : `nome=${encodeURIComponent((quem.nome ?? "").trim())}`;
     const r = await api.get<{ data: SolicitacaoPonto[] }>(
-      `/solicitacoes-ponto/${prefeituraId}`,
+      `/solicitacoes-ponto/${prefeituraId}?${recorte}`,
     );
     return r.data ?? [];
   },

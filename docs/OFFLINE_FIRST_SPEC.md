@@ -9,6 +9,13 @@
 
 ---
 
+> **Out/2026 — o módulo `time-records` saiu do back** (`/time-records*` responde 404).
+> O ponto passou a usar `POST /checklist/bater-ponto` (bater), `GET /ponto/registros`
+> (folha da pessoa do token) e `POST /solicitacoes-ponto` com `tipo: "corrigir"`
+> (correção de horário). Itens da fila gravados para as rotas antigas são reescritos
+> no `flushOutbox` — ver `lib/offline/migrar-rotas.ts`. Onde este documento ainda
+> citar `/time-records`, vale esta nota.
+
 ## 0. TL;DR
 
 O app **não é** "sem nada de offline". Ele tem uma base parcial **boa para escritas**
@@ -86,8 +93,8 @@ Enquanto isso, o pull faz **full-replace por entidade** (idempotente, correto; s
 | `/reabastecer` | `/equipamentos/comboios/:p/:f` | `submit("reabastecimento")` | ✅ Salva offline |
 | `/engraxar` | `/equipamentos/:p` | `submit("lubrificacao")` | ✅ Salva offline |
 | `/ponto` | `/feature-flags/:p` | outbox `ponto` | ⚠️ Funciona se flag já cacheada; 1ª vez offline → redireciona |
-| `/meu-ponto` | `/time-records/:p`, `/configuracoes/:p` | outbox `ponto` (novas) | ❌ **Lista some offline** |
-| `/espelho` | `/time-records/:p`, `/escala/:p`, `/abonos/:p` | `editarHorario`/`solicitacoes` **direto** | ❌ **Espelho vazio; edições quebram** |
+| `/meu-ponto` | `/ponto/registros` (só a pessoa do token), `/solicitacoes-ponto/:p?cpf=`, `/configuracoes/:p` | outbox `ponto` → `/checklist/bater-ponto` | ✅ cache por pessoa |
+| `/espelho` | `/ponto/registros`, `/escala/:p`, `/abonos/:p` | outbox `solicitacao` (correção = `tipo: "corrigir"`) | ✅ últimos 6 meses |
 | `/historico` | `/historico/:p` | — | ⚠️ Reload offline → vazio |
 | `/minhas-solicitacoes` | `/solicitacoes-ponto/:p` | `solicitacoes.criar` **direto** | ❌ **Lista some; criar quebra** |
 | `/perfil` | `localStorage` | — | ✅ Funciona |
@@ -344,8 +351,8 @@ Toda escrita vira um **evento tipado** no outbox (tabela Dexie `outbox`). Mapeam
 | `CREATE_ABASTECIMENTO` | `/abastecimentos` | POST | `submit("abastecimento")` |
 | `CREATE_LUBRIFICACAO` | `/lubrificacoes` | POST | `submit("lubrificacao")` |
 | `CREATE_REABASTECIMENTO` | `/reabastecimentos` | POST | `submit("reabastecimento")` |
-| `CREATE_PUNCH` | `/time-records` | POST | `enqueue("ponto")` |
-| `UPDATE_PUNCH` | `/time-records/update/:id` | POST | `editarHorario` ⟵ **migrar p/ outbox** |
+| `CREATE_PUNCH` | `/checklist/bater-ponto` | POST | `enqueue("ponto")` |
+| `UPDATE_PUNCH` | `/solicitacoes-ponto` (`tipo: "corrigir"`) | POST | `pontoApi.editarHorario` → `submit("solicitacao")` |
 | `CREATE_SOLICITACAO` | `/solicitacoes-ponto` | POST | `solicitacoes.criar` ⟵ **migrar p/ outbox** |
 | `UPLOAD_IMAGE` (futuro) | `/uploads` (Supabase signed) | POST | hoje base64 no payload ⟶ §10 |
 

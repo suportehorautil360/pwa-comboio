@@ -13,10 +13,19 @@ import {
 import { PageBackHeader } from "@/components/mobile/page-back-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { type PontoRegistro } from "@/lib/api/ponto";
-import { useAbonos, useEscala, useTimeRecords } from "@/lib/data/queries";
+import { mesMaisAntigo, type PontoRegistro } from "@/lib/api/ponto";
+import {
+  useAbonos,
+  useEscala,
+  usePontoRegistros,
+  useSolicitacoes,
+} from "@/lib/data/queries";
 import { batidasPendentes, mesclarBatidas } from "@/lib/offline/pendentes";
 import { useOutboxRaw } from "@/lib/offline/use-outbox";
+import {
+  aplicarCorrecoesPendentes,
+  correcoesNaFila,
+} from "@/lib/ponto/ajustes-pendentes";
 import { formatarCpf, limparCpf } from "@/lib/ponto/cpf";
 import {
   ESPELHO_COLUNAS,
@@ -92,7 +101,9 @@ export function EspelhoScreen() {
     data: recordsData,
     loading: loadingRecords,
     refetch: recarregar,
-  } = useTimeRecords(user?.prefeituraId);
+  } = usePontoRegistros(user);
+  const { data: solicitacoesData, refetch: recarregarSolicitacoes } =
+    useSolicitacoes(user);
   const { data: escalaData } = useEscala(user?.prefeituraId);
   const { data: abonosData } = useAbonos(user?.prefeituraId);
   const escala = escalaData ?? null;
@@ -110,7 +121,8 @@ export function EspelhoScreen() {
     () =>
       user
         ? mesclarBatidas(
-            (recordsData ?? []).filter((r) => ehDoOperador(r, user)),
+            // As do servidor já vêm recortadas pela pessoa do token.
+            recordsData ?? [],
             pendentes.filter((b) => ehDoOperador(b, user)),
           )
         : [],
@@ -126,7 +138,14 @@ export function EspelhoScreen() {
     queueMicrotask(() => setUser(u));
   }, [router]);
 
-  const efetivas = useMemo(() => resolverLedger(todas), [todas]);
+  const efetivas = useMemo(
+    () =>
+      aplicarCorrecoesPendentes(resolverLedger(todas), [
+        ...(solicitacoesData ?? []),
+        ...correcoesNaFila(raw),
+      ]),
+    [todas, solicitacoesData, raw],
+  );
 
   const abonosDoMes = useMemo(
     () => abonosDoMesDe(abonos, user?.cpf, mes),
@@ -227,10 +246,15 @@ export function EspelhoScreen() {
         <EditarBatidaSheet
           batida={editando}
           onClose={() => setEditando(null)}
-          onSalvo={() => {
+          onSalvo={(enviado) => {
             setEditando(null);
-            setSucesso("Correção enviada — pendente de aprovação do gestor.");
+            setSucesso(
+              enviado
+                ? "Correção enviada — pendente de aprovação do gestor."
+                : "Correção salva no aparelho — vai ao gestor ao reconectar.",
+            );
             recarregar();
+            recarregarSolicitacoes();
           }}
         />
         {user ? (
@@ -241,6 +265,7 @@ export function EspelhoScreen() {
               setIncluirAberto(null);
               setSucesso(msg);
               recarregar();
+              recarregarSolicitacoes();
             }}
             prefeituraId={user.prefeituraId}
             nome={user.nome}
@@ -295,6 +320,13 @@ export function EspelhoScreen() {
           PDF
         </Button>
       </div>
+
+      {mes < mesMaisAntigo(new Date()) ? (
+        <p className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          O app guarda os últimos 6 meses de batidas. Para meses anteriores,
+          peça o espelho ao RH.
+        </p>
+      ) : null}
 
       <Card className="ring-border/50">
         <CardContent className="grid grid-cols-3 gap-2 pt-0 text-center">
