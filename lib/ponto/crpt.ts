@@ -5,10 +5,11 @@
  */
 import type { EmpresaConfig } from "../api/configuracoes";
 import { TIPOS_PONTO, type PontoRegistro } from "../api/ponto";
+import { MARCA_PDF } from "../export/marca";
 import { baixarPDFRecibo } from "../export/pdf-recibo";
 import { formatarCpf, limparCpf } from "./cpf";
 
-export const REP_P = { nome: "Hora Útil 360", modelo: "REP-P", versao: "1.0" };
+export const REP_P = { nome: MARCA_PDF, modelo: "REP-P", versao: "1.0" };
 
 const NAO_INFORMADO = "Não informado";
 

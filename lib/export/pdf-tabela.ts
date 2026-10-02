@@ -3,6 +3,7 @@
  * jsPDF é carregado sob demanda (dynamic import) para não entrar no bundle
  * principal.
  */
+import { MARCA_PDF } from "./marca";
 
 const MARGIN = 14;
 const PAGE_W = 210;
@@ -44,7 +45,7 @@ export async function baixarPDFTabela(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(150);
-  doc.text("Hora Útil 360", left, y);
+  doc.text(MARCA_PDF, left, y);
   y += 6;
   doc.setFontSize(14);
   doc.setTextColor(20);
