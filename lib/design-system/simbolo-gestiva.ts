@@ -1,0 +1,8 @@
+/**
+ * Símbolo Gestiva 360 (kit `app-web-horautil/public/branding-gestiva/svg/simbolo-color.svg`),
+ * como data URL para os ícones gerados com `ImageResponse` (icon/apple-icon).
+ */
+const SIMBOLO_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="Gestiva 360"><title>Gestiva 360</title><defs><linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1560D4"/><stop offset="1" stop-color="#0A2E73"/></linearGradient><linearGradient id="go" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7A1A"/><stop offset="1" stop-color="#E64A00"/></linearGradient></defs><rect width="39" height="100" fill="url(#gb)"/><path fill="url(#go)" d="M38 0H100A120 120 0 0 0 100 100H38Z"/><g transform="translate(15.75 78)"><path fill="#FFFFFF" d="M29.92 0.75Q21.76 0.75 15.58 -2.72Q9.4 -6.2 5.94 -12.63Q2.48 -19.06 2.48 -27.89Q2.48 -37.13 6.18 -43.58Q9.88 -50.02 16.09 -53.39Q22.29 -56.75 29.84 -56.75Q34.8 -56.75 39.07 -55.34Q43.33 -53.93 46.64 -51.34Q49.95 -48.75 51.96 -45.23Q53.97 -41.72 54.42 -37.51H39.09Q38.75 -38.94 37.98 -40.06Q37.21 -41.19 36.06 -41.96Q34.92 -42.73 33.43 -43.13Q31.95 -43.52 30.14 -43.52Q26.35 -43.52 23.64 -41.7Q20.93 -39.88 19.52 -36.42Q18.12 -32.96 18.12 -28.11Q18.12 -23.19 19.47 -19.69Q20.82 -16.2 23.47 -14.34Q26.12 -12.48 30.07 -12.48Q33.52 -12.48 35.84 -13.49Q38.15 -14.51 39.29 -16.37Q40.44 -18.23 40.44 -20.75L43.07 -20.45H30.29V-31.27H55.1V-23.53Q55.1 -15.86 51.87 -10.43Q48.63 -5 42.94 -2.12Q37.25 0.75 29.92 0.75Z"/></g></svg>';
+
+export const SIMBOLO_GESTIVA_DATA_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SIMBOLO_SVG)}`;

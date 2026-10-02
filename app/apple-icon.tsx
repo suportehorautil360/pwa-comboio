@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+import { SIMBOLO_GESTIVA_DATA_URL } from "@/lib/design-system/simbolo-gestiva";
+
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
@@ -16,22 +18,8 @@ export default function AppleIcon() {
           background: "#0a0e17",
         }}
       >
-        <div
-          style={{
-            width: 120,
-            height: 120,
-            borderRadius: "24%",
-            background: "#f97316",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 72,
-            fontWeight: 700,
-            color: "#0a0e17",
-          }}
-        >
-          H
-        </div>
+        {/* Símbolo Gestiva 360 do kit da marca. */}
+        <img alt="" src={SIMBOLO_GESTIVA_DATA_URL} width={120} height={120} style={{ borderRadius: "16%" }} />
       </div>
     ),
     { ...size }

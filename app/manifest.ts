@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "HORA ÚTIL 360",
-    short_name: "Hora Útil",
+    name: "Gestiva 360",
+    short_name: "Gestiva 360",
     description:
       "Plataforma SaaS de gestão operacional de frotas e equipamentos.",
     start_url: "/",

@@ -1,11 +1,13 @@
 import { ImageResponse } from "next/og";
 
+import { SIMBOLO_GESTIVA_DATA_URL } from "@/lib/design-system/simbolo-gestiva";
+
 export const contentType = "image/png";
 
 /**
  * Gera os ícones do PWA: 192 e 512 (purpose `any`) + um 512 `maskable` com
- * fundo full-bleed e logo dentro da safe-area (~50%), para a tela inicial do
- * Android não cortar o "H". Servidos em /icon/192, /icon/512 e /icon/maskable.
+ * fundo full-bleed e símbolo Gestiva 360 dentro da safe-area (~50%), para a tela inicial
+ * do Android não cortar o símbolo. Servidos em /icon/192, /icon/512 e /icon/maskable.
  */
 export function generateImageMetadata() {
   return [
@@ -33,22 +35,7 @@ export default function Icon({ id }: { id: string }) {
           borderRadius: maskable ? 0 : "20%",
         }}
       >
-        <div
-          style={{
-            width: logo,
-            height: logo,
-            borderRadius: "24%",
-            background: "#f97316",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: Math.round(logo * 0.62),
-            fontWeight: 700,
-            color: "#0a0e17",
-          }}
-        >
-          H
-        </div>
+        <img alt="" src={SIMBOLO_GESTIVA_DATA_URL} width={logo} height={logo} style={{ borderRadius: "16%" }} />
       </div>
     ),
     { width: px, height: px },

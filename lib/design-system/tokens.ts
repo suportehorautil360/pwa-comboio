@@ -1,11 +1,11 @@
 /**
- * HORA ÚTIL 360 — Design System Tokens
+ * Gestiva 360 — Design System Tokens
  * Fonte de verdade para tokens semânticos e de marca.
  * Valores CSS vivem em app/globals.css; este arquivo documenta e tipa o sistema.
  */
 
 export const brand = {
-  name: "HORA ÚTIL 360",
+  name: "Gestiva 360",
   tagline: "Hub Mestre — Controle Operacional",
   description: "Plataforma SaaS B2B de gestão operacional de frotas e equipamentos.",
 } as const;

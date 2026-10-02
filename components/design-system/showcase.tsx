@@ -83,7 +83,7 @@ export function DesignSystemShowcase() {
   return (
     <AppShell
       headerTitle="Design System"
-      headerSubtitle="Documentação v1.0 — HORA ÚTIL 360"
+      headerSubtitle="Documentação v1.0 — Gestiva 360"
     >
       <div className="mx-auto max-w-5xl space-y-10">
         <div className="space-y-4">
@@ -163,7 +163,7 @@ export function DesignSystemShowcase() {
                   {Object.entries(typography.scale).map(([key, scale]) => (
                     <div key={key} className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                       <span className={scale.class}>
-                        {key === "metric" ? "1.234" : key === "label" ? "Label" : "HORA ÚTIL 360"}
+                        {key === "metric" ? "1.234" : key === "label" ? "Label" : "Gestiva 360"}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground">
                         {scale.size} / {scale.weight}
